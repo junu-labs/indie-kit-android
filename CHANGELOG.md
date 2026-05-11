@@ -6,6 +6,15 @@
 
 ## [Unreleased]
 
+## [0.2.3] - 2026-05-11
+
+### 고침
+
+- `DefaultNativeAdContent` 에 `NativeAdAdvertiserView` 항상 컴포즈 (자산 null 일 땐 빈 콘텐츠).
+  - v0.2.2 까지 Google 공식 sample 패턴 (`advertiser` 자산 미등록) 을 따랐지만, 안드로이드 AdMob SDK 25.1.0 native ad validator 가 응답에 advertiser 자산이 있을 때 "Advertiser assets outside native ad view" 경고를 띄움.
+  - v0.2.1 의 `nativeAd.advertiser?.let { NativeAdAdvertiserView { ... } }` 조건부 컴포즈도 같은 경고를 띄움 — Compose 의 ?.let 분기로 view 가 가끔 미컴포즈 → 측정 실패로 추정.
+  - 신규: `NativeAdAdvertiserView { nativeAd.advertiser?.let { Text(...) } }` — view 자체는 항상 등록, 자산만 조건부 표시. `NativeAdMediaView` 가 이미 쓰는 같은 패턴.
+
 ## [0.2.2] - 2026-05-11
 
 ### 고침

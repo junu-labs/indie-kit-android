@@ -439,6 +439,19 @@ internal fun DefaultNativeAdContent(nativeAd: NativeAd, modifier: Modifier = Mod
                                     )
                                 }
                             }
+                            // advertiser 자산 — view 자체는 항상 등록. 자산 null 이면 빈 콘텐츠.
+                            //  - AdMob native ad validator 가 응답에 advertiser 가 있을 때 view 가 NativeAdView 의
+                            //    boundary 안에 layout 측정 가능한 상태여야 OK 로 본다.
+                            //  - ?.let 으로 조건부 컴포즈 시 가끔 view 미컴포즈 → 측정 실패 → "Advertiser assets outside ..." 경고.
+                            //  - 항상 컴포즈 + null 일 땐 빈 콘텐츠로 view 만 살아 있게.
+                            NativeAdAdvertiserView {
+                                nativeAd.advertiser?.let { advertiser ->
+                                    Text(
+                                        text = advertiser,
+                                        style = MaterialTheme.typography.labelMedium
+                                    )
+                                }
+                            }
                             nativeAd.starRating?.let { rating ->
                                 NativeAdStarRatingView {
                                     Text(
