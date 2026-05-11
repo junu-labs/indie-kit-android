@@ -6,6 +6,13 @@
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-05-11
+
+### 고침
+
+- `NativeAdView` 기본 UI (`DefaultNativeAdContent`) 에 `NativeAdAdvertiserView` 추가.
+  - AdMob 정책 검증이 native ad 응답의 `advertiser` 자산을 NativeAdView 안에 trackable 한 view 로 등록 안 됐다고 보고 "Advertiser assets outside native ad view, all asset boundaries must be inside the native ad view" 경고를 띄움. advertiser 자산을 표시 (또는 null 일 땐 미표시) 하는 줄을 추가해 boundary 검사 통과.
+
 ## [0.2.0] - 2026-05-11
 
 ### 추가

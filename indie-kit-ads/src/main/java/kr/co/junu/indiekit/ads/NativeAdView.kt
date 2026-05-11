@@ -430,6 +430,17 @@ internal fun DefaultNativeAdContent(nativeAd: NativeAd, modifier: Modifier = Mod
                                     )
                                 }
                             }
+                            // advertiser 자산 — 응답에 있으면 반드시 NativeAdAdvertiserView 로 등록해야 한다.
+                            // 미등록 시 AdMob 정책 검증 (NativeAdView boundary 검사) 이 실패해
+                            // "Advertiser assets outside native ad view" 경고를 띄운다.
+                            nativeAd.advertiser?.let { advertiser ->
+                                NativeAdAdvertiserView {
+                                    Text(
+                                        text = advertiser,
+                                        style = MaterialTheme.typography.labelMedium
+                                    )
+                                }
+                            }
                             nativeAd.starRating?.let { rating ->
                                 NativeAdStarRatingView {
                                     Text(
