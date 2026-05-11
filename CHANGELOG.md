@@ -6,6 +6,15 @@
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-05-11
+
+### 고침
+
+- `NativeAdView` 기본 UI (`DefaultNativeAdContent`) 를 Google 공식 Compose 데모 (`DisplayNativeAdView`) 와 100% 일치하게 다시 작성.
+  - **icon 자산 등록 시점 변경** — 기존: `nativeAd.icon?.drawable?.toBitmap()?.let { bitmap -> NativeAdIconView { Image(bitmap) } }` (bitmap 까지 not null 이어야 NativeAdIconView 컴포즈). 신규: `nativeAd.icon?.let { icon -> NativeAdIconView { icon.drawable?.toBitmap()?.let { Image(bitmap) } } }` (icon 자산이 있으면 NativeAdIconView 는 항상 등록, bitmap 만 별개로 그림). icon 자산이 있는데 drawable 변환이 실패해도 자산 setter 는 등록된 상태가 boundary 검사 통과의 약속.
+  - v0.2.1 에서 추가했던 `NativeAdAdvertiserView` 분기 제거 — Google 데모도 advertiser 자체를 표시 안 하지만 boundary 에러 안 띄움. 표시 / 미표시 결정은 사용자 커스텀 진입점에서.
+  - `NativeAdAttribution` 의 text 를 명시 ("광고") — 기존 기본값 "Ad" 그대로 둘 수도 있었지만 한국어 라이브러리 정체성 살림.
+
 ## [0.2.1] - 2026-05-11
 
 ### 고침

@@ -408,17 +408,26 @@ public fun NativeAdButton(
  */
 @Composable
 internal fun DefaultNativeAdContent(nativeAd: NativeAd, modifier: Modifier = Modifier) {
+    // Google 공식 Compose 데모 (DisplayNativeAdView) 와 같은 구조로 자산을 등록한다.
+    //  - 핵심 약속: 자산 객체 (icon / headline / body / starRating / price / store / callToAction) 가
+    //    not null 이면 그 자산의 *View setter* 가 반드시 NativeAdView 안에 등록되어야 한다.
+    //  - 자식 콘텐츠 (bitmap, drawable 등) 가 못 그려져도 자산 View 자체는 등록 — boundary 검사 통과 위함.
+    //  - advertiser 같은 부가 자산은 Google 데모도 표시 안 함. 표시할지 / 등록만 할지 결정은 사용자 커스텀 진입점에서.
     Box(modifier = modifier.padding(8.dp)) {
         NativeAdView(nativeAd) {
             Column(modifier = Modifier.fillMaxWidth()) {
                 Box {
                     Row(modifier = Modifier.fillMaxWidth()) {
-                        nativeAd.icon?.drawable?.toBitmap()?.let { bitmap ->
+                        // icon 자산이 있으면 NativeAdIconView 자체는 항상 등록.
+                        // bitmap 변환이 실패해도 setter 는 등록된 상태가 boundary 검사 통과의 약속.
+                        nativeAd.icon?.let { icon ->
                             NativeAdIconView(Modifier.padding(5.dp)) {
-                                Image(
-                                    bitmap = bitmap.asImageBitmap(),
-                                    contentDescription = "광고 아이콘"
-                                )
+                                icon.drawable?.toBitmap()?.let { bitmap ->
+                                    Image(
+                                        bitmap = bitmap.asImageBitmap(),
+                                        contentDescription = "광고 아이콘"
+                                    )
+                                }
                             }
                         }
                         Column {
@@ -427,17 +436,6 @@ internal fun DefaultNativeAdContent(nativeAd: NativeAd, modifier: Modifier = Mod
                                     Text(
                                         text = headline,
                                         style = MaterialTheme.typography.titleLarge
-                                    )
-                                }
-                            }
-                            // advertiser 자산 — 응답에 있으면 반드시 NativeAdAdvertiserView 로 등록해야 한다.
-                            // 미등록 시 AdMob 정책 검증 (NativeAdView boundary 검사) 이 실패해
-                            // "Advertiser assets outside native ad view" 경고를 띄운다.
-                            nativeAd.advertiser?.let { advertiser ->
-                                NativeAdAdvertiserView {
-                                    Text(
-                                        text = advertiser,
-                                        style = MaterialTheme.typography.labelMedium
                                     )
                                 }
                             }
@@ -451,7 +449,10 @@ internal fun DefaultNativeAdContent(nativeAd: NativeAd, modifier: Modifier = Mod
                             }
                         }
                     }
-                    NativeAdAttribution(modifier = Modifier.align(Alignment.TopStart))
+                    NativeAdAttribution(
+                        modifier = Modifier.align(Alignment.TopStart),
+                        text = "광고"
+                    )
                 }
 
                 NativeAdMediaView(modifier = Modifier.fillMaxWidth())
