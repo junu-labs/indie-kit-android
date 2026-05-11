@@ -1,0 +1,17 @@
+# Gradle
+.gradle/
+build/
+
+# Local Android SDK 경로 (사용자 PC 마다 다름)
+local.properties
+
+# IntelliJ / Android Studio
+.idea/
+*.iml
+captures/
+
+# Kotlin
+.kotlin/
+
+# macOS
+.DS_Store

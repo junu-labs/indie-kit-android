@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  역할
+   - 라이브러리 모듈의 빈 매니페스트.
+   - 패키지 namespace 는 build.gradle.kts 의 android.namespace 가 담당하므로 여기 package 속성 불필요.
+   - 3단계 진입 시 INTERNET 권한 (사용처가 어차피 갖고 있을) 외엔 추가 매니페스트 작업 없음.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" />

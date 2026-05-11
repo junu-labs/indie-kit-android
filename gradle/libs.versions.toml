@@ -1,0 +1,54 @@
+# 역할
+#  - indie-kit-android 의 모든 모듈이 같은 버전 카탈로그를 본다.
+#  - 0단계 (부트스트랩) 엔 외부 의존성 0개. junit + 빌드 도구 3개 (AGP / Kotlin / maven-publish) 만 등록.
+#  - 1단계 (Analytics) 진입 시 firebase-bom 추가, 2단계 (Ads) 시 compose-bom + play-services-ads,
+#    3단계 (Network) 시 okhttp 또는 ktor, 4단계 (Billing) 시 billing-ktx,
+#    5단계 (Auth) 시 google-id / kakao 가 각각 그 모듈 build.gradle.kts 에만 추가된다.
+#
+# 주의사항
+#  - SolTi 의 도구 버전 (AGP 9.0.1 / Kotlin 2.3.20 / JDK 17) 과 똑같이 맞춰 cross-build 충돌을 0 으로.
+
+[versions]
+agp = "9.0.1"
+kotlin = "2.3.20"
+junit = "4.13.2"
+mavenPublish = "0.30.0"
+
+# 1단계 추가 — Firebase Analytics. SolTi 와 같은 BOM 으로 묶어 Crashlytics 등 형제 라이브러리도 같은 시점 일치.
+firebaseBom = "34.10.0"
+
+# 2단계 추가 — AdMob (배너 / 전면 / 리워드 / Native) + UMP (유럽 광고 동의창) + Compose.
+playServicesAds = "25.1.0"
+userMessagingPlatform = "3.2.0"
+composeBom = "2026.03.00"
+coreKtx = "1.18.0"
+
+[libraries]
+# 단위 테스트 — 모든 모듈 공용 (모듈마다 PlaceholderTest 또는 실제 테스트에서 사용).
+junit = { group = "junit", name = "junit", version.ref = "junit" }
+
+# 1단계 IndieKitAnalytics 가 끌어 쓸 Firebase 라이브러리.
+#  - firebase-bom: 모든 firebase-* 모듈의 버전을 한 줄로 통일.
+#  - firebase-analytics: 통계 본체. Kotlin extensions 포함되어 있어 별도 -ktx 없이 사용 가능.
+firebase-bom = { group = "com.google.firebase", name = "firebase-bom", version.ref = "firebaseBom" }
+firebase-analytics = { group = "com.google.firebase", name = "firebase-analytics" }
+
+# 2단계 IndieKitAds 가 끌어 쓸 AdMob / UMP / Compose 라이브러리.
+#  - play-services-ads: AdMob 본체 (배너 + 전면 + 리워드 + Native).
+#  - user-messaging-platform: UMP (유럽 사용자 광고 동의창).
+#  - compose-bom: Compose 모든 모듈을 한 시점으로 묶기 위함. SolTi 와 같은 시점.
+#  - androidx-compose-foundation / material3 / ui / ui-tooling-preview: BannerAdView / NativeAdView 의 Compose 진입점에 필요.
+play-services-ads = { group = "com.google.android.gms", name = "play-services-ads", version.ref = "playServicesAds" }
+user-messaging-platform = { group = "com.google.android.ump", name = "user-messaging-platform", version.ref = "userMessagingPlatform" }
+androidx-compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "composeBom" }
+androidx-compose-foundation = { group = "androidx.compose.foundation", name = "foundation" }
+androidx-compose-material3 = { group = "androidx.compose.material3", name = "material3" }
+androidx-compose-ui = { group = "androidx.compose.ui", name = "ui" }
+androidx-compose-ui-tooling-preview = { group = "androidx.compose.ui", name = "ui-tooling-preview" }
+androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
+
+[plugins]
+android-library = { id = "com.android.library", version.ref = "agp" }
+kotlin-android  = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
+kotlin-compose  = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+maven-publish   = { id = "com.vanniktech.maven.publish", version.ref = "mavenPublish" }

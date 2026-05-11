@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  역할
+   - 라이브러리 모듈의 빈 매니페스트.
+   - 패키지 namespace 는 build.gradle.kts 의 android.namespace 가 담당하므로 여기 package 속성 불필요.
+   - 모듈이 권한 / Activity / receiver / meta-data 를 요구하게 되면 여기 추가 (현재 0단계엔 없음).
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" />

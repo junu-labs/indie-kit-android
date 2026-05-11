@@ -1,0 +1,99 @@
+/*
+ * BannerAdView.kt — IndieKitAds
+ *
+ * 역할
+ *  - 표준 배너 광고 (320×50) 를 띄우는 Compose Composable.
+ *  - 사용처가 `BannerAdView(modifier = Modifier.fillMaxWidth())` 한 줄로 띄움.
+ *
+ * 주요 개념
+ *  - AndroidView 로 AdMob 의 AdView 를 wrapping.
+ *  - 광고 ID 는 `IndieKitAds.resolvedBannerAdUnitID(context)` 에서 자동 가져옴 (configure 결과 / 테스트 ID).
+ *  - 광고 적재 / 표시 이벤트는 `AnalyticsBus` 로 흘려보내기 — 통계 모듈을 깐 앱이면 자동으로 Firebase 로 흘러감.
+ *
+ * 사용 방법
+ *  ```kotlin
+ *  if (!subscription.isPro) {
+ *      BannerAdView(modifier = Modifier.fillMaxWidth().height(50.dp))
+ *  }
+ *  ```
+ *
+ * 주의사항
+ *  - configure 안 한 상태에서 호출되면 placeholder Box 만 그려짐 (광고는 안 뜸, 크래시는 없음).
+ *  - DisposableEffect 로 화면 떠날 때 AdView.destroy() — 메모리 누수 방지.
+ *
+ * iOS 자매 (`IndieKitAds.BannerView`) 와 같은 역할.
+ */
+
+package kr.co.junu.indiekit.ads
+
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.height
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
+import kr.co.junu.indiekit.core.AnalyticsBus
+import kr.co.junu.indiekit.core.IKLogger
+import kr.co.junu.indiekit.core.analyticsParams
+import com.google.android.gms.ads.AdListener
+import com.google.android.gms.ads.AdRequest
+import com.google.android.gms.ads.AdSize
+import com.google.android.gms.ads.AdView
+import com.google.android.gms.ads.LoadAdError
+
+/**
+ * 표준 배너 광고 (320×50) Composable.
+ *
+ * @param modifier Compose Modifier. 보통 `Modifier.fillMaxWidth()` 로 가로 가득.
+ *                 높이는 안 적으면 AdView 가 자기 광고 크기 (50dp) 만큼 차지.
+ */
+@Composable
+public fun BannerAdView(modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+
+    // configure 안 한 상태면 placeholder Box — 광고 미표시.
+    if (!IndieKitAds.isConfigured) {
+        Box(modifier = modifier.height(50.dp))
+        return
+    }
+
+    val adView = remember {
+        AdView(context).apply {
+            setAdSize(AdSize.BANNER)
+            adUnitId = IndieKitAds.resolvedBannerAdUnitID(context)
+            adListener = object : AdListener() {
+                override fun onAdLoaded() {
+                    IKLogger.ads.info("배너 광고 적재 성공")
+                    AnalyticsBus.record("ad_loaded", analyticsParams("format" to "banner"))
+                }
+
+                override fun onAdFailedToLoad(error: LoadAdError) {
+                    IKLogger.ads.warning("배너 광고 적재 실패: ${error.message}")
+                }
+
+                override fun onAdImpression() {
+                    AnalyticsBus.record("ad_impression", analyticsParams("format" to "banner"))
+                }
+            }
+            loadAd(AdRequest.Builder().build())
+        }
+    }
+
+    AndroidView(
+        modifier = modifier,
+        factory = { adView },
+        update = {
+            // 갱신할 게 없음 — 광고 ID 는 configure 시점에 한 번 결정.
+        }
+    )
+
+    // 화면을 떠날 때 AdView 정리 — 메모리 누수 방지.
+    DisposableEffect(adView) {
+        onDispose {
+            adView.destroy()
+        }
+    }
+}

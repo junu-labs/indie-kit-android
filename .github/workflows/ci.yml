@@ -1,0 +1,37 @@
+# 역할
+#  - main 으로 push / PR 마다 ./gradlew build + test 를 ubuntu 에서 돌린다.
+#  - 0단계 결과물 (6개 모듈) 의 모든 PlaceholderTest 가 그린이어야 0단계 끝점 통과.
+#
+# 주의사항
+#  - JDK 17 — Kotlin 2.3.20 + AGP 9.0.1 의 최소 권장.
+#  - instrumented test (에뮬레이터) 는 1단계 이후 모듈별로 필요할 때만 추가 (런너 비용 큼).
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    name: Gradle Build + Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: JDK 17 설정
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Gradle 캐시 + 셋업
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: 빌드
+        run: ./gradlew build
+
+      - name: 테스트
+        run: ./gradlew test

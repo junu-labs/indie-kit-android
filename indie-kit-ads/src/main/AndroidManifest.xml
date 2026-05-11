@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  역할
+   - indie-kit-ads 의 매니페스트.
+   - AdMob app id 와 광고가 요구하는 권한 (INTERNET, AD_ID) 을 미리 선언.
+   - 사용처 앱의 매니페스트와 자동 merge 되므로 따로 적을 필요 없음.
+
+  주의사항
+   - APPLICATION_ID 는 Google 공식 *테스트* app id 가 기본값.
+     사용처 앱은 출시 직전 자기 매니페스트의 같은 키를 실제 AdMob app id 로 *덮어쓴다*:
+     ```xml
+     <meta-data
+         android:name="com.google.android.gms.ads.APPLICATION_ID"
+         android:value="ca-app-pub-XXXXXXXXXXXXXXXX~XXXXXXXXXX"
+         tools:replace="android:value" />
+     ```
+   - 패키지 namespace 는 build.gradle.kts 의 android.namespace 가 담당.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- 광고 요청에 필요한 네트워크 권한. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- Android 13+ 광고 ID 접근 권한. AdMob SDK 가 자동 사용. -->
+    <uses-permission android:name="com.google.android.gms.permission.AD_ID" />
+
+    <application>
+        <!--
+          Google 공식 테스트 app id (출처: https://developers.google.com/admob/android/test-ads).
+          사용처 앱이 출시 직전 자기 매니페스트에서 tools:replace 로 실제 id 로 덮어쓴다.
+        -->
+        <meta-data
+            android:name="com.google.android.gms.ads.APPLICATION_ID"
+            android:value="ca-app-pub-3940256099942544~3347511713" />
+    </application>
+
+</manifest>
