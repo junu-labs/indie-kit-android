@@ -6,6 +6,16 @@
 
 ## [Unreleased]
 
+## [0.2.4] - 2026-05-12
+
+### 고침
+
+- `NativeAdView` validator 의 `Advertiser assets outside native ad view` 경고를 일으키는 **진짜 원인 두 가지** 를 잡음.
+  진단 출처: [Google AdMob 공식 포럼 글타래](https://groups.google.com/g/google-admob-ads-sdk/c/6XzeFnEcCj0) — SDK 가 일반적 boundary 검사 실패를 "advertiser" 한 자산 메시지로 표시하는 케이스.
+  - **`DefaultNativeAdContent` 의 외부 Box wrapping 제거** — NativeAdView 가 layout 의 root 가 되도록. 이전: `Box(modifier.padding(8.dp)) { NativeAdView(nativeAd) { ... } }`. 이후: `NativeAdView(nativeAd, modifier = modifier.padding(8.dp)) { ... }`.
+  - **`NativeAdMediaView` 에 aspectRatio 명시** — `Modifier.fillMaxWidth()` 만 있으면 첫 layout pass 에 height 가 0 으로 측정되어 validator 가 "asset outside native ad view" 경고를 띄움. 응답의 `mediaContent.aspectRatio` 를 우선 사용, null 이면 16:9 fallback.
+  - **`NativeAdMediaView` (primitive) 의 MediaView 에 layoutParams 명시** — `ViewGroup.LayoutParams(MATCH_PARENT, WRAP_CONTENT)`. View 시스템 기본 layoutParams 가 환경에 따라 0×0 으로 잡힐 수 있어 안전장치.
+
 ## [0.2.3] - 2026-05-11
 
 ### 고침
