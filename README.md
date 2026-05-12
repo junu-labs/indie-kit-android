@@ -8,15 +8,15 @@
 
 | 모듈 | 무엇을 해 주는가 | 단계 | 상태 |
 |---|---|---|---|
-| `indie-kit-analytics` | Firebase Analytics — 화면 이동 / 이벤트 / 사용자 속성 | 1 | `v0.1.0` (라이브러리 완성, SolTi 검증 6월) |
-| `indie-kit-ads` | AdMob 배너 / 전면 / 리워드 / Native + 유럽 광고 동의창 | 2 | **`v0.2.0` (라이브러리 완성, 데모 앱 빌드 통과)** |
+| `indie-kit-analytics` | Firebase Analytics — 화면 이동 / 이벤트 / 사용자 속성 | 1 | `v0.1.0` (라이브러리 완성, SolTi 검증 예정) |
+| `indie-kit-ads` | AdMob 배너 / 전면 / 리워드 / Native + 유럽 광고 동의창 | 2 | **`v0.2.7` (실기기 검증 완료 — AdMob native validator "No implementation issues found" 통과)** |
 | `indie-kit-network` | OkHttp 위 얇은 호출 묶음 + 인증값 자동 갱신 | 3 | 라이브러리 미착수 |
 | `indie-kit-billing` | Play Billing v8 — 구독 / 1회성 / 평생 결제 | 4 | 라이브러리 미착수 |
 | `indie-kit-auth` | 카카오 / 구글 / 애플 로그인 + 우리 서버 세션 발급 | 5 | 라이브러리 미착수 |
 
 자세한 단계는 `PLAN.md`, 모듈별 변경 이력은 `CHANGELOG.md` 참고.
 
-현재는 **2단계 IndieKitAds 라이브러리 완성** (`v0.2.0`). 4종 광고 (배너 / 전면 / 리워드 / Native — Native 는 안드로이드 선행) + 유럽 광고 동의창 (UMP) 가 살아 있고, 검증 데모 앱 (`Apps/IndieKitExample/indieKitDemo_Android/`) 빌드도 통과. 다음은 SolTi 통합 검증 또는 3단계 (Network) 진입.
+현재는 **2단계 IndieKitAds 출시 + 실기기 검증 완료** (`v0.2.7`). 4종 광고 (배너 / 전면 / 리워드 / Native — Native 는 안드로이드 선행) + 유럽 광고 동의창 (UMP) + AdMob native ad debug validator 단말 통과. 다음은 SolTi 통합 검증 또는 3단계 (Network) 진입.
 
 ## 사용 방법 (1단계 이후 적용)
 
@@ -36,7 +36,7 @@ dependencyResolutionManagement {
 
 ```kotlin
 implementation("com.github.junu-labs.indie-kit-android:indie-kit-analytics:v0.1.0")
-implementation("com.github.junu-labs.indie-kit-android:indie-kit-ads:v0.2.0")
+implementation("com.github.junu-labs.indie-kit-android:indie-kit-ads:v0.2.7")
 ```
 
 광고만 필요한 앱은 광고 모듈만 추가 → 나머지 외부 라이브러리 (Firebase, 카카오, 구글, OkHttp, Compose) 가 빌드에 안 끼게 한다.
@@ -87,10 +87,18 @@ BannerAdView(modifier = Modifier.fillMaxWidth())   // 배너 (320×50)
 NativeAdView(modifier = Modifier.fillMaxWidth())   // Native (라이브러리 기본 UI)
 
 // 사용자 커스텀 Native 레이아웃이 필요하면:
-NativeAdView(nativeAd, modifier = Modifier.fillMaxWidth()) {
-    Column {
+NativeAdView(
+    nativeAd = nativeAd,
+    modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min)   // ① IntrinsicSize.Min 강제
+) {
+    Column(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
         NativeAdHeadlineView { Text(nativeAd.headline ?: "") }
-        NativeAdMediaView(modifier = Modifier.fillMaxWidth())
+        if (nativeAd.mediaContent != null) {                       // ② mediaContent null 체크
+            NativeAdMediaView(
+                modifier = Modifier.fillMaxWidth().sizeIn(maxHeight = 120.dp),  // ③ 높이 제한 (AdMob 정책 ≥120dp)
+                scaleType = ImageView.ScaleType.CENTER_CROP
+            )
+        }
         nativeAd.callToAction?.let { cta ->
             NativeAdCallToActionView { NativeAdButton(text = cta) }
         }
@@ -109,13 +117,23 @@ IndieKitAds.requestConsentForm(activity) { error -> /* EEA 동의창 다시 띄�
 
 광고 이벤트 (적재 / 표시 / 닫힘 / 보상 / 클릭) 는 통계 모듈을 깐 앱이면 자동으로 Firebase Analytics 에도 흘러감 (`AnalyticsBus` 약한 연결).
 
+#### Native 광고 — 사용자 커스텀 레이아웃 시 핵심 3가지
+
+라이브러리가 제공하는 기본 UI (`NativeAdView(modifier)` 한 줄) 는 이미 검증 통과 패턴을 박아 둠. 직접 자기 레이아웃을 짤 땐 다음 3가지를 지켜야 AdMob native ad debug validator (테스트 광고 + debug 빌드 전용 도구) 가 "No implementation issues found" 로 통과:
+
+1. `NativeAdView(nativeAd, modifier = ...)` 의 modifier 에 **`Modifier.fillMaxWidth().height(IntrinsicSize.Min)`** — `verticalScroll Column / Card / LazyColumn item` 등 unbounded height 환경에서도 자식 측정만큼만 차지하게.
+2. `NativeAdMediaView` 호출은 **`if (nativeAd.mediaContent != null) { ... }`** 안에서만, **`sizeIn(maxHeight = 120.dp)`** 로 높이 제한 (정책 ≥120dp 만족).
+3. `loadNativeAd` 가 라이브러리 안에서 이미 **`NativeAdOptions.ADCHOICES_TOP_RIGHT`** 를 박아 둠 — 직접 `AdLoader.Builder` 를 짜는 경우엔 같은 옵션 명시.
+
+이 3가지를 빠뜨리면 validator 가 "Advertiser assets outside native ad view ..." 라는 오인 메시지 (SDK 가 자산 측정 실패를 첫 자산 이름으로 일반화) 를 띄움. 단 풍선 자체는 debug 빌드 + 테스트 광고에만 뜨고 실제 출시본 (실 광고) 엔 안 뜨므로 정책 / 사용자 영향은 없음.
+
 ## 최소 환경
 
 - Android 8.0 (API 26)
 - Kotlin 2.3+
-- AGP 9.0+
+- AGP 9.1+
 - JDK 17 (바이트코드 타겟)
-- Gradle 9.1+
+- Gradle 9.3+
 
 ## 폴더 구조
 
@@ -147,9 +165,24 @@ indie-kit-android/
 # 로컬 검증
 export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
 ./gradlew build              # 6개 모듈 컴파일 + 린트
-./gradlew test               # 6개 PlaceholderTest
+./gradlew test               # 6개 모듈 단위 테스트
 ./gradlew :indie-kit-ads:publishToMavenLocal   # 한 모듈을 ~/.m2 에 발행
 ```
+
+### 검증 데모 (`indieKitDemo_Android`) 와 빨리 손발 맞추기 — composite build
+
+매번 git push / 태그 / JitPack 빌드 대기 없이 라이브러리 코드 → 데모 빌드 즉시 반영. `Apps/IndieKitExample/indieKitDemo_Android/settings.gradle.kts` 의 includeBuild 블록 (주석 처리되어 있음) 을 켜고 `gradle/libs.versions.toml` 의 좌표를 `kr.co.junu` + v 접두사 없는 SemVer 로 바꾸면 됨. 다시 JitPack 출시본으로 검증할 땐 그 반대로.
+
+## 버전 히스토리
+
+마일스톤만. 그 사이 hotfix / 시행착오는 `CHANGELOG.md` 참고.
+
+| 버전 | 날짜 | 무엇을 했나 |
+|---|---|---|
+| **`v0.2.7`** | 2026-05-12 | **2단계 IndieKitAds 실기기 검증 완료** — AdMob native ad validator "No implementation issues found" 통과. 라이브러리 기본 UI 에 TouchCart 출처 측정 패턴 3가지 (`IntrinsicSize.Min` / `mediaContent` null 체크 + `sizeIn(maxHeight = 120.dp)` / `NativeAdOptions.ADCHOICES_TOP_RIGHT`) 흡수. `NativeAdView.kt` 는 [Google 공식 compose_utils/NativeAdView.kt](https://github.com/googleads/googleads-mobile-android-examples/blob/main/kotlin/advanced/JetpackComposeDemo/app/src/main/java/com/google/android/gms/example/jetpackcomposedemo/formats/compose_utils/NativeAdView.kt) 와 한 글자 안 다른 상태로 유지, 라이브러리 추가물은 같은 패키지의 `IndieKitNativeAd.kt` 로 분리. 빌드 도구 AGP 9.1.1 / Gradle 9.3.1 통일. (v0.2.1 ~ v0.2.6 은 같은 풍선 풀려고 시도한 hotfix 6번, 모두 빗나감 — 검증 통과 패턴이 측정 쪽에 있다는 단서를 한 번에 잡지 못한 결과.) |
+| `v0.2.0` | 2026-05-11 | 2단계 IndieKitAds 라이브러리 완성. AdMob 4종 광고 (배너 / 전면 / 리워드 / Native — Native 는 안드로이드 선행) + 유럽 광고 동의창 (UMP) + Compose 진입점 (`BannerAdView`, `NativeAdView`) + AnalyticsBus 자동 연결. |
+| `v0.1.0` | 2026-05-11 | 1단계 IndieKitAnalytics — Firebase Analytics 한 줄 추상화 (`logScreen` / `log` / `logLogin` / `logSignUp` / `logPurchase` / `setUserId` / `setUserProperty`). AnalyticsBus 등록 통로 마련. |
+| `v0.0.1` | 2026-05-11 | 0단계 부트스트랩 — Gradle 멀티 모듈 골격 6개 (Core + 외부 5개), JUnit 4 자리, JitPack / Maven Local 경로, CI (Ubuntu + JDK 17). |
 
 ## 함께 쓰는 자매 저장소
 
