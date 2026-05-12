@@ -6,10 +6,12 @@
 #    5단계 (Auth) 시 google-id / kakao 가 각각 그 모듈 build.gradle.kts 에만 추가된다.
 #
 # 주의사항
-#  - SolTi 의 도구 버전 (AGP 9.0.1 / Kotlin 2.3.20 / JDK 17) 과 똑같이 맞춰 cross-build 충돌을 0 으로.
+#  - 데모 (IndieKitDemo_Android) 와 같이 composite build 로 한 데몬 안에서 도는 환경 (settings.gradle.kts 의
+#    includeBuild) 에서는 두 빌드의 AGP 가 같아야 한다 (Gradle 의 AgpVersionCompatibilityRule 가 차이 거부).
+#    데모가 9.1.1 로 올라간 시점에 라이브러리도 9.1.1 로 정렬. 라이브러리 산출물 (.aar) 자체엔 영향 없음.
 
 [versions]
-agp = "9.0.1"
+agp = "9.1.1"
 kotlin = "2.3.20"
 junit = "4.13.2"
 mavenPublish = "0.30.0"

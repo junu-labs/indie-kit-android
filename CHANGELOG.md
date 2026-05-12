@@ -6,6 +6,21 @@
 
 ## [Unreleased]
 
+## [0.2.7] - 2026-05-12
+
+### 고침
+
+- **`NativeAdView` validator 통과 (사용자 단말 "No implementation issues found" 확인)**. 진짜 원인은 advertiser 자산이 아니라 자산 view 측정 실패였고, AdMob 안드로이드 SDK 의 native validator 가 측정 실패를 첫 자산 이름 (advertiser) 으로 일반화해 표시한 것. 검증 통과 출처: TouchCart (`Apps/TouchCart/Android/.../NativeAdRow.AdLoadedCard`).
+- 라이브러리 기본 UI (`DefaultNativeAdContent`) 의 측정 패턴 3가지를 흡수:
+  - `NativeAdView` modifier 에 `Modifier.fillMaxWidth().height(IntrinsicSize.Min)` 강제 — verticalScroll Column / Card 등 unbounded height 환경에서도 자식 측정만큼만 차지하게.
+  - `if (nativeAd.mediaContent != null)` 체크 + `Modifier.fillMaxWidth().sizeIn(maxHeight = 120.dp)` + `ImageView.ScaleType.CENTER_CROP` — 응답에 mediaContent 있을 때만 등록 + 높이 120dp 안으로 제한 (AdMob 정책 ≥120dp 만족).
+  - `loadNativeAd` 의 `AdLoader.Builder` 에 `NativeAdOptions.ADCHOICES_TOP_RIGHT` 명시 — AdChoices 위치 고정.
+- 라이브러리 진입점 / 기본 UI / loadNativeAd 를 같은 패키지의 새 파일 `IndieKitNativeAd.kt` 로 분리. `NativeAdView.kt` 자체는 [Google 공식 compose_utils/NativeAdView.kt](https://github.com/googleads/googleads-mobile-android-examples/blob/main/kotlin/advanced/JetpackComposeDemo/app/src/main/java/com/google/android/gms/example/jetpackcomposedemo/formats/compose_utils/NativeAdView.kt) 와 한 글자도 안 다른 상태로 유지 (package + 머리 주석만 라이브러리 식별성).
+
+### 빌드
+
+- AGP 9.0.1 → 9.1.1, Gradle wrapper 9.1.0 → 9.3.1 — 데모 (IndieKitDemo_Android) 와 composite build (settings.gradle.kts 의 includeBuild) 호환을 위함. JitPack / 사용처 .aar 산출물 자체엔 영향 없음.
+
 ## [0.2.6] - 2026-05-12
 
 ### 고침
