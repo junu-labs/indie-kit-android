@@ -6,6 +6,17 @@
 
 ## [Unreleased]
 
+## [0.2.5] - 2026-05-12
+
+### 고침
+
+- `NativeAdView` 의 `Advertiser assets outside native ad view` validator 경고를 **Google 공식 Jetpack Compose 데모 (`DisplayNativeAdView`) 와 1:1 동일 구조** 로 정렬해 해결.
+  - 출처: [googleads-mobile-android-examples / JetpackComposeDemo / NativeScreen.kt](https://github.com/googleads/googleads-mobile-android-examples/blob/698554091d61442dd157c5508c848974ee420d39/kotlin/advanced/JetpackComposeDemo/app/src/main/java/com/google/android/gms/example/jetpackcomposedemo/formats/NativeScreen.kt) — iOS 자매가 같은 출처 샘플로 검증 통과.
+  - **`DefaultNativeAdContent` 에서 advertiser 자산을 표시하지 않음** — Google 공식 데모도 advertiser 를 등록 / 표시하지 않음. v0.2.1 ~ v0.2.4 에서 조건부 / 항상 / 빈 콘텐츠 어떤 변형으로 시도해도 validator boundary 검사가 가끔 실패해 경고가 떴음. 기본 UI 에서는 빼고, 직접 커스텀이 필요한 사용자는 `NativeAdView(nativeAd) { ... }` 안에서 `NativeAdAdvertiserView { Text(...) }` 를 자기 책임으로 사용.
+  - **외부 `Box(modifier.padding(8.dp))` 복원** — v0.2.4 에서 root 가설 따라 제거했었지만 Google 공식 데모는 외부 Box 가 있음. Box → NativeAdView 의 AndroidView 구조 자체가 root 인지에는 영향 없음.
+  - **`NativeAdMediaView` 의 `aspectRatio` 제거** — `Modifier.fillMaxWidth()` 만. Google 공식 데모와 동일. SDK 의 MediaView 가 자체적으로 aspectRatio 를 측정.
+  - **`NativeAdMediaView` (primitive) 의 MediaView 에서 명시적 `layoutParams` 제거** — `MediaView(context)` 만. Google 공식 데모와 동일.
+
 ## [0.2.4] - 2026-05-12
 
 ### 고침

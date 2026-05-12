@@ -34,7 +34,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.ButtonDefaults
@@ -280,18 +279,7 @@ public fun NativeAdMediaView(
         ?: error("NativeAdMediaView 는 NativeAdView 안에서만 호출할 수 있습니다.")
     AndroidView(
         modifier = modifier,
-        // MediaView 의 layoutParams 명시 — 부모 (NativeAdView) 의 너비에 맞추고 height 은 wrap.
-        //  - 명시 안 하면 기본 layoutParams 가 view 환경에 따라 0 이 될 수 있어,
-        //    AdMob native ad validator 가 "asset boundaries outside native ad view" 경고를 띄운다.
-        //  - 참고: https://groups.google.com/g/google-admob-ads-sdk/c/6XzeFnEcCj0
-        factory = { context ->
-            MediaView(context).apply {
-                layoutParams = ViewGroup.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.WRAP_CONTENT
-                )
-            }
-        },
+        factory = { context -> MediaView(context) },
         update = { view ->
             nativeAdView.mediaView = view
             scaleType?.let { view.setImageScaleType(it) }
@@ -417,22 +405,22 @@ public fun NativeAdButton(
  * 라이브러리가 제공하는 Native 광고 기본 레이아웃.
  *
  * 사용자가 자기 디자인을 쓰고 싶으면 `NativeAdView(nativeAd, modifier) { ... }` 진입점 사용.
+ *
+ * 주의 — Google 공식 Compose 데모 (DisplayNativeAdView) 와 1:1 동일 구조 유지.
+ *  - advertiser 자산은 의도적으로 표시하지 않음. 응답에 advertiser 가 있을 때 NativeAdAdvertiserView 가
+ *    NativeAdView boundary 안에서 측정 가능한 상태로 항상 등록되어야 validator 가 통과하는데,
+ *    조건부 컴포즈 / 빈 콘텐츠 어떤 변형으로 시도해도 boundary 검사가 가끔 실패해 "Advertiser assets
+ *    outside native ad view" 경고가 뜬다. 구글 공식 데모도 advertiser 를 표시하지 않으므로,
+ *    기본 UI 에서는 빼고 직접 커스텀이 필요한 사용자는 `NativeAdView(nativeAd) { ... }` 안에서
+ *    `NativeAdAdvertiserView { Text(...) }` 를 자기 책임으로 사용하면 된다.
  */
 @Composable
 internal fun DefaultNativeAdContent(nativeAd: NativeAd, modifier: Modifier = Modifier) {
-    // Google 공식 Compose 데모 (DisplayNativeAdView) 와 같은 구조로 자산을 등록한다.
-    //  - 핵심 약속 1: 자산 객체 (icon / headline / body / starRating / price / store / callToAction) 가
-    //    not null 이면 그 자산의 *View setter* 가 반드시 NativeAdView 안에 등록되어야 한다.
-    //  - 핵심 약속 2: NativeAdView 가 layout 의 root 가 되도록 — 외부 Box wrapping 을 안 한다.
-    //    (Google AdMob 포럼: https://groups.google.com/g/google-admob-ads-sdk/c/6XzeFnEcCj0)
-    //  - 핵심 약속 3: MediaView 와 자산 view 가 측정 가능한 height 을 갖도록.
-    //    fillMaxWidth() 만 있으면 height 가 0 으로 측정되어 validator 가 "asset outside native ad view" 경고.
-    NativeAdView(nativeAd, modifier = modifier.padding(8.dp)) {
-        Column(modifier = Modifier.fillMaxWidth()) {
+    Box(modifier = modifier.padding(8.dp)) {
+        NativeAdView(nativeAd) {
+            Column(modifier = Modifier.fillMaxWidth()) {
                 Box {
                     Row(modifier = Modifier.fillMaxWidth()) {
-                        // icon 자산이 있으면 NativeAdIconView 자체는 항상 등록.
-                        // bitmap 변환이 실패해도 setter 는 등록된 상태가 boundary 검사 통과의 약속.
                         nativeAd.icon?.let { icon ->
                             NativeAdIconView(Modifier.padding(5.dp)) {
                                 icon.drawable?.toBitmap()?.let { bitmap ->
@@ -452,19 +440,6 @@ internal fun DefaultNativeAdContent(nativeAd: NativeAd, modifier: Modifier = Mod
                                     )
                                 }
                             }
-                            // advertiser 자산 — view 자체는 항상 등록. 자산 null 이면 빈 콘텐츠.
-                            //  - AdMob native ad validator 가 응답에 advertiser 가 있을 때 view 가 NativeAdView 의
-                            //    boundary 안에 layout 측정 가능한 상태여야 OK 로 본다.
-                            //  - ?.let 으로 조건부 컴포즈 시 가끔 view 미컴포즈 → 측정 실패 → "Advertiser assets outside ..." 경고.
-                            //  - 항상 컴포즈 + null 일 땐 빈 콘텐츠로 view 만 살아 있게.
-                            NativeAdAdvertiserView {
-                                nativeAd.advertiser?.let { advertiser ->
-                                    Text(
-                                        text = advertiser,
-                                        style = MaterialTheme.typography.labelMedium
-                                    )
-                                }
-                            }
                             nativeAd.starRating?.let { rating ->
                                 NativeAdStarRatingView {
                                     Text(
@@ -481,14 +456,7 @@ internal fun DefaultNativeAdContent(nativeAd: NativeAd, modifier: Modifier = Mod
                     )
                 }
 
-                // MediaView aspectRatio — 응답의 mediaContent.aspectRatio 를 우선, 없으면 16:9 fallback.
-                //  - fillMaxWidth() 만 있으면 첫 layout pass 에 height 0 측정 → validator 경고.
-                //  - aspectRatio 로 너비 결정 시 height 자동 산출 → 0 회피.
-                val mediaAspectRatio = nativeAd.mediaContent?.aspectRatio?.takeIf { it > 0f }
-                    ?: (16f / 9f)
-                NativeAdMediaView(
-                    modifier = Modifier.fillMaxWidth().aspectRatio(mediaAspectRatio)
-                )
+                NativeAdMediaView(modifier = Modifier.fillMaxWidth())
 
                 nativeAd.body?.let { body ->
                     NativeAdBodyView(modifier = Modifier.padding(5.dp)) {
@@ -520,3 +488,4 @@ internal fun DefaultNativeAdContent(nativeAd: NativeAd, modifier: Modifier = Mod
             }
         }
     }
+}
