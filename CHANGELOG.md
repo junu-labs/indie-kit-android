@@ -6,6 +6,15 @@
 
 ## [Unreleased]
 
+## [0.2.6] - 2026-05-12
+
+### 고침
+
+- `NativeAdView` (Compose 진입점) 의 `AndroidView` factory 에서 내부 **`NativeAdView` (View) 와 `ComposeView` 의 `layoutParams` 높이를 `MATCH_PARENT` → `WRAP_CONTENT`** 로 변경.
+  - **진단 근거**: 사용자 안드로이드 폰 스크린샷에서 NativeAd 영역에 광고 자산이 안 그려지고 거대한 AdMob 로고가 화면을 거의 채우는 증상 확인. iOS 는 같은 라이브러리 디자인으로 정상 카드가 그려지고 validator 풍선이 "No implementation issues found" 통과. 즉 광고는 정상 적재되는데 안드로이드의 자산 view 측정이 실패해 SDK 가 fallback 로고를 표시하던 것.
+  - **원인**: 데모 `MainActivity` 가 `verticalScroll Column > Card > Column > Box > Column > NativeAdView(fillMaxWidth())` 안에서 호출. `verticalScroll` 은 자식에 unbounded height 환경을 제공하는데, 라이브러리 내부에서 NativeAdView (View) 와 ComposeView 의 layoutParams 가 `MATCH_PARENT × MATCH_PARENT` 라 unbounded 높이를 무한 측정 → 자식 자산 view 측정 실패 → SDK 가 자산 boundary 검증 실패 → fallback 로고 + "Advertiser asset outside ..." validator 경고 (SDK 가 측정 실패를 첫 자산 이름으로 일반화).
+  - **해결**: layoutParams 높이를 `WRAP_CONTENT` 로 변경해 자식 자산 측정 결과를 따르게. Google 공식 데모는 `Scaffold > Surface(fillMaxSize)` 환경이라 `MATCH_PARENT × MATCH_PARENT` 도 통과했지만, 라이브러리는 어느 환경 (scroll / Box / Card 안) 에서도 동작해야 하므로 `MATCH_PARENT × WRAP_CONTENT` 가 안전한 기본값.
+
 ## [0.2.5] - 2026-05-12
 
 ### 고침

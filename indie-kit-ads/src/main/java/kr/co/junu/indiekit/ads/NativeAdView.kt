@@ -148,16 +148,23 @@ public fun NativeAdView(
     AndroidView(
         modifier = modifier,
         factory = { context ->
+            // layoutParams 높이 WRAP_CONTENT — 부모 가로는 채우고 세로는 자식 (ComposeView 안의 자산) 측정에 따름.
+            //  - MATCH_PARENT 높이로 두면 verticalScroll Column 등 unbounded height 환경에서
+            //    무한 / 비정상 측정 → SDK 가 자산 view boundary 검증 실패 → fallback AdMob 로고로 화면 채움 +
+            //    "Advertiser assets outside native ad view" validator 경고 (SDK 가 측정 실패를 첫 자산 이름으로 일반화).
+            //  - 데모 MainActivity 가 NativeAdView 를 Card / verticalScroll Column 안에서 호출해서 드러난 증상.
+            //  - Google 공식 데모는 Scaffold > Surface(fillMaxSize) 환경이라 같은 코드가 통과 — 라이브러리는
+            //    어느 환경에서도 동작해야 하므로 MATCH_PARENT × WRAP_CONTENT 가 안전한 기본값.
             val composeView = ComposeView(context).apply {
                 layoutParams = ViewGroup.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.MATCH_PARENT
+                    ViewGroup.LayoutParams.WRAP_CONTENT
                 )
             }
             com.google.android.gms.ads.nativead.NativeAdView(context).apply {
                 layoutParams = ViewGroup.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.MATCH_PARENT
+                    ViewGroup.LayoutParams.WRAP_CONTENT
                 )
                 addView(composeView)
                 nativeAdViewRef.value = this
