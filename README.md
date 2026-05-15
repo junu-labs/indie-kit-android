@@ -119,11 +119,11 @@ IndieKitAds.requestConsentForm(activity) { error -> /* EEA 동의창 다시 띄�
 
 #### Native 광고 — 사용자 커스텀 레이아웃 시 핵심 3가지
 
-라이브러리가 제공하는 기본 UI (`NativeAdView(modifier)` 한 줄) 는 이미 검증 통과 패턴을 박아 둠. 직접 자기 레이아웃을 짤 땐 다음 3가지를 지켜야 AdMob native ad debug validator (테스트 광고 + debug 빌드 전용 도구) 가 "No implementation issues found" 로 통과:
+라이브러리가 제공하는 기본 UI (`NativeAdView(modifier)` 한 줄) 는 이미 검증 통과 패턴이 들어 있음. 직접 자기 레이아웃을 짤 땐 다음 3가지를 지켜야 AdMob native ad debug validator (테스트 광고 + debug 빌드 전용 도구) 가 "No implementation issues found" 로 통과:
 
 1. `NativeAdView(nativeAd, modifier = ...)` 의 modifier 에 **`Modifier.fillMaxWidth().height(IntrinsicSize.Min)`** — `verticalScroll Column / Card / LazyColumn item` 등 unbounded height 환경에서도 자식 측정만큼만 차지하게.
 2. `NativeAdMediaView` 호출은 **`if (nativeAd.mediaContent != null) { ... }`** 안에서만, **`sizeIn(maxHeight = 120.dp)`** 로 높이 제한 (정책 ≥120dp 만족).
-3. `loadNativeAd` 가 라이브러리 안에서 이미 **`NativeAdOptions.ADCHOICES_TOP_RIGHT`** 를 박아 둠 — 직접 `AdLoader.Builder` 를 짜는 경우엔 같은 옵션 명시.
+3. `loadNativeAd` 가 라이브러리 안에서 이미 **`NativeAdOptions.ADCHOICES_TOP_RIGHT`** 를 적용해 둠 — 직접 `AdLoader.Builder` 를 짜는 경우엔 같은 옵션 명시.
 
 이 3가지를 빠뜨리면 validator 가 "Advertiser assets outside native ad view ..." 라는 오인 메시지 (SDK 가 자산 측정 실패를 첫 자산 이름으로 일반화) 를 띄움. 단 풍선 자체는 debug 빌드 + 테스트 광고에만 뜨고 실제 출시본 (실 광고) 엔 안 뜨므로 정책 / 사용자 영향은 없음.
 
