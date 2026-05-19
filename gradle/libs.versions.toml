@@ -25,6 +25,15 @@ userMessagingPlatform = "3.2.0"
 composeBom = "2026.03.00"
 coreKtx = "1.18.0"
 
+# 3단계 추가 — Network (OkHttp + kotlinx.serialization + kotlinx.coroutines).
+#  - okhttp: 검증된 HTTP 클라이언트. SolTi / TapCounter 도 같은 계열.
+#  - kotlinx-serialization-json: @Serializable data class 의 JSON 인코딩 / 디코딩.
+#  - kotlinx-coroutines-core: suspend 함수 + withContext(Dispatchers.IO). 사용처도 같이 끌고 가야 하므로 api 노출.
+#  - kotlin-serialization plugin 의 버전은 Kotlin 컴파일러와 같이 간다 (plugins 절 참고).
+okhttp = "4.12.0"
+kotlinxSerialization = "1.7.3"
+kotlinxCoroutines = "1.8.1"
+
 [libraries]
 # 단위 테스트 — 모든 모듈 공용 (모듈마다 PlaceholderTest 또는 실제 테스트에서 사용).
 junit = { group = "junit", name = "junit", version.ref = "junit" }
@@ -49,8 +58,18 @@ androidx-compose-ui = { group = "androidx.compose.ui", name = "ui" }
 androidx-compose-ui-tooling-preview = { group = "androidx.compose.ui", name = "ui-tooling-preview" }
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 
+# 3단계 IndieKitNetwork 가 끌어 쓸 OkHttp / 직렬화 라이브러리.
+#  - okhttp: HTTP 본체. 사용처가 raw Request / Response 를 직접 다룰 수 있게 api 노출.
+#  - kotlinx-serialization-json: @Serializable 어노테이션을 사용처가 자기 자료에 붙여 쓰므로 api 노출.
+okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
+okhttp-mockwebserver = { group = "com.squareup.okhttp3", name = "mockwebserver", version.ref = "okhttp" }
+kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinxSerialization" }
+kotlinx-coroutines-core = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-core", version.ref = "kotlinxCoroutines" }
+
 [plugins]
 android-library = { id = "com.android.library", version.ref = "agp" }
 kotlin-android  = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-compose  = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+# 3단계 — @Serializable 코드 생성 플러그인. Kotlin 컴파일러와 같은 버전으로 묶임.
+kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 maven-publish   = { id = "com.vanniktech.maven.publish", version.ref = "mavenPublish" }

@@ -1,13 +1,13 @@
 // 역할
-//  - co.junu.indiekit.network 패키지의 안드로이드 라이브러리.
-//  - 3단계 진입 시 OkHttp (또는 Ktor) 위 얇은 래퍼 + 401 자동 토큰 갱신 흐름이 들어간다.
+//  - kr.co.junu.indiekit.network 패키지의 안드로이드 라이브러리.
+//  - 3단계 — OkHttp 위 얇은 래퍼 + 401 응답 시 인증값 자동 갱신 흐름.
 //
-// 0단계 약속
-//  - 외부 의존성 0개 (OkHttp / Ktor 는 3단계에서 추가).
-//  - Placeholder.kt 만 들어 있다.
+// 외부 의존성
+//  - okhttp (api): HTTP 본체. raw Request / Response 출구가 사용처에 노출됨.
+//  - kotlinx-serialization-json (api): @Serializable 자료의 JSON 인코딩 / 디코딩.
 //
 // 발행 좌표
-//  - co.junu:indie-kit-network:{VERSION_NAME}.
+//  - kr.co.junu:indie-kit-network:{VERSION_NAME}.
 
 import com.vanniktech.maven.publish.AndroidSingleVariantLibrary
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
@@ -15,6 +15,8 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.kotlin.android)
+    // 3단계 — @Serializable 코드 생성. Kotlin 컴파일러와 같은 버전.
+    alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.maven.publish)
 }
 
@@ -50,8 +52,23 @@ kotlin {
 }
 
 dependencies {
+    // Core 의 공개 타입 (IKLogger 등) 을 사용처에 노출.
     api(project(":indie-kit-core"))
+
+    // OkHttp — 본체.
+    //  - api 사용 사유: send(Request) raw 출구로 사용처가 직접 Request / Response 객체를 다룬다.
+    api(libs.okhttp)
+
+    // kotlinx-serialization-json — JSON 인코딩 / 디코딩.
+    //  - api 사용 사유: 사용처가 자기 자료 클래스에 @Serializable 을 붙이려면 어노테이션이 compile classpath 에 있어야 한다.
+    api(libs.kotlinx.serialization.json)
+
+    // kotlinx-coroutines-core — suspend 함수 + Dispatchers.IO.
+    //  - api 사용 사유: 사용처가 suspend get/post/put/delete 를 부르려면 coroutines 가 compile classpath 에 있어야 한다.
+    api(libs.kotlinx.coroutines.core)
+
     testImplementation(libs.junit)
+    // OkHttp 응답 모킹은 자체 Interceptor 로 처리 — mockwebserver 의존성은 불필요.
 }
 
 mavenPublishing {

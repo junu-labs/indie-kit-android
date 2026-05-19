@@ -6,6 +6,36 @@
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-05-19
+
+### 추가 (3단계 IndieKitNetwork)
+
+- 라이브러리 본체 작성 — iOS 자매 (`IndieKitNetwork` struct) 와 1:1 API.
+  - `IndieKitNetwork` class — 인스턴스를 직접 만들어 쓰는 형태. `baseURL` / `defaultHeaders` / `timeoutMs` / `tokenProvider` / `tokenRefresher` / `client` / `json` / `logger` / `authorizationHeader`.
+  - `get<R>()` / `post<B, R>(body)` / `put<B, R>(body)` / `delete()` — `inline reified`, kotlinx.serialization 의 KSerializer 자동 처리.
+  - `send(Request): RawResponse` — raw 출구. 인증 헤더 자동 첨부 + 401 자동 갱신은 그대로 작동.
+  - 401 자동 갱신 흐름 — iOS 와 동일. 매 요청 직전 tokenProvider 호출 → `Authorization: Bearer` 첨부 → 401 응답 + tokenRefresher 있으면 갱신 한 번 → 같은 요청 재시도 → 두 번째에도 401 이면 `Unauthorized`.
+  - `HTTPLogEntry` data class + `IndieKitNetworkError` sealed class (`InvalidUrl` / `Http` / `Decoding` / `Transport` / `Unauthorized`).
+- 외부 의존성 추가 (이 모듈에만):
+  - `okhttp:4.12.0` (api) — 사용처가 `Request` / `Response` 를 직접 만질 수 있음.
+  - `kotlinx-serialization-json:1.7.3` (api) — 사용처가 자기 자료 클래스에 `@Serializable` 을 붙임.
+  - `kotlinx-coroutines-core:1.8.1` (api) — `suspend` 함수 + `Dispatchers.IO`.
+  - `kotlin-serialization` 플러그인 (`org.jetbrains.kotlin.plugin.serialization`, Kotlin 컴파일러와 같은 버전).
+- 단위 테스트 8개 (iOS 자매와 1:1 대응). OkHttp `Interceptor` 로 fake response 시퀀스 주입.
+
+### 검증 (모두 그린)
+
+- `./gradlew :indie-kit-network:build :indie-kit-network:test` — 통과 (테스트 8개 / 0 실패).
+- 데모 앱 (`Apps/IndieKitExample/indieKitDemo_Android/`) 의 에뮬레이터에서 GET (jsonplaceholder) / POST junu app-version / 401 자동 갱신 흐름 모두 확인.
+- 데모 앱 검증 동안 composite build ON (`settings.gradle.kts` 의 `includeBuild` 블록). JitPack 출시본 검증으로 돌리려면 그 블록 주석 처리 + `libs.versions.toml` 의 좌표 / 버전 원복.
+
+### 결정 사항
+
+- **OkHttp 단독 (Ktor 아님).** PLAN.md 의 "잔가지 결정" 6번 — SolTi / TapCounter 가 OkHttp 면 그대로 OkHttp. 의존성 단순, 사용처 `OkHttpClient` (interceptor / cookie jar 등) 재사용 가능.
+- **`inline reified` 함수 + `@PublishedApi internal` 헬퍼.** `get<R>()` 같은 generic 함수가 호출 시점에 reified R 의 KSerializer 를 얻기 위해 inline 필수. 본문에서 호출하는 내부 헬퍼 (`buildRequest`, `encodeJson`, `decode`) 는 `@PublishedApi internal` 로 노출.
+- **`RawResponse` 새 자료.** OkHttp 의 `Response` 는 body 를 한 번만 읽고 닫아야 하므로, 라이브러리가 body 를 미리 `ByteArray` 로 읽어 박아 돌려줌. 사용처가 close 책임 없음.
+- **`tokenProvider` / `tokenRefresher` 는 `suspend` 람다.** iOS 가 `async` 클로저인 자매에 대응. 사용처가 access token 을 비동기 저장소 (DataStore 등) 에서 가져올 수 있게.
+
 ## [0.2.7] - 2026-05-12
 
 ### 고침
