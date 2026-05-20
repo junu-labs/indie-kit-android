@@ -1,13 +1,13 @@
 // 역할
-//  - co.junu.indiekit.billing 패키지의 안드로이드 라이브러리.
-//  - 4단계 진입 시 Google Play Billing v8 래퍼 + 자동 갱신 구독 + 비소진형 1회성 결제 + 자동 acknowledge 가 들어간다.
+//  - kr.co.junu.indiekit.billing 패키지의 안드로이드 라이브러리.
+//  - 4단계 — Google Play Billing v8 래퍼 + 자동 갱신 구독 + 비소진형 1회성 결제 + 자동 acknowledge.
 //
-// 0단계 약속
-//  - 외부 의존성 0개 (billing-ktx 는 4단계에서 추가).
-//  - Placeholder.kt 만 들어 있다.
+// 외부 의존성
+//  - play-billing-ktx (api): BillingClient / ProductDetails / Purchase 자체가 사용처에 노출되는 형이라 api.
+//  - kotlinx-coroutines-core (api): suspend 함수 + StateFlow.
 //
 // 발행 좌표
-//  - co.junu:indie-kit-billing:{VERSION_NAME}.
+//  - kr.co.junu:indie-kit-billing:{VERSION_NAME}.
 
 import com.vanniktech.maven.publish.AndroidSingleVariantLibrary
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
@@ -50,8 +50,19 @@ kotlin {
 }
 
 dependencies {
+    // Core 의 공개 타입 (IKLogger 등) 을 사용처에 노출.
     api(project(":indie-kit-core"))
+
+    // Play Billing — 본체.
+    //  - api 사용 사유: 사용처가 ProductDetails / Purchase 등 객체를 직접 만지는 경우가 있음.
+    api(libs.play.billing.ktx)
+
+    // kotlinx-coroutines-core — suspend 함수 + StateFlow.
+    //  - api 사용 사유: 사용처가 entitlements: StateFlow 를 collect 하려면 coroutines 가 compile classpath 에 있어야 한다.
+    api(libs.kotlinx.coroutines.core)
+
     testImplementation(libs.junit)
+    testImplementation(libs.kotlinx.coroutines.core)
 }
 
 mavenPublishing {

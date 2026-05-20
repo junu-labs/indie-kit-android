@@ -4,8 +4,8 @@
 > - 0단계 부트스트랩 — 완료 (`v0.0.1`)
 > - 1단계 IndieKitAnalytics — 라이브러리 + 데모 검증 완료 (`v0.1.0`)
 > - 2단계 IndieKitAds — 라이브러리 + 데모 검증 완료, Native 패치 반복 (`v0.2.7` 까지)
-> - 3단계 IndieKitNetwork — **라이브러리 본체 + 데모 검증 완료 (`v0.3.0`)**
-> - 4단계 IndieKitBilling — 라이브러리 미착수
+> - 3단계 IndieKitNetwork — 라이브러리 본체 + 데모 검증 완료 (`v0.3.0`)
+> - 4단계 IndieKitBilling — **라이브러리 본체 + 데모 검증 완료 (`v0.4.0`)**
 > - 5단계 IndieKitAuth — 라이브러리 미착수
 >
 > **저장소:** `junu-labs/indie-kit-android` (Gradle 멀티 모듈 + JitPack)

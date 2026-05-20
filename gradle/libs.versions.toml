@@ -34,6 +34,12 @@ okhttp = "4.12.0"
 kotlinxSerialization = "1.7.3"
 kotlinxCoroutines = "1.8.1"
 
+# 4단계 추가 — Billing (Google Play Billing).
+#  - billing-ktx: Play Billing 의 Kotlin 확장. suspend / coroutines 친화 헬퍼 포함.
+#  - 사용처 (앱) 가 Play Billing 의 BillingClient / ProductDetails 등을 직접 만지는 경우가 있어 api 노출.
+#  - 시작은 v7.1.1 (안정 최신) — v8 마이그레이션은 별도 단계.
+playBilling = "7.1.1"
+
 [libraries]
 # 단위 테스트 — 모든 모듈 공용 (모듈마다 PlaceholderTest 또는 실제 테스트에서 사용).
 junit = { group = "junit", name = "junit", version.ref = "junit" }
@@ -65,6 +71,10 @@ okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhtt
 okhttp-mockwebserver = { group = "com.squareup.okhttp3", name = "mockwebserver", version.ref = "okhttp" }
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinxSerialization" }
 kotlinx-coroutines-core = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-core", version.ref = "kotlinxCoroutines" }
+
+# 4단계 IndieKitBilling 가 끌어 쓸 Google Play Billing 라이브러리.
+#  - billing-ktx: Play Billing 의 Kotlin 확장. BillingClient / ProductDetails / Purchase 등 사용처 노출 형이라 api.
+play-billing-ktx = { group = "com.android.billingclient", name = "billing-ktx", version.ref = "playBilling" }
 
 [plugins]
 android-library = { id = "com.android.library", version.ref = "agp" }

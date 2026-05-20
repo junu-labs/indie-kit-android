@@ -6,6 +6,46 @@
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-05-20
+
+### 추가 (4단계 IndieKitBilling)
+
+- 라이브러리 본체 작성 — iOS 자매 (`IndieKitBilling.shared`) 와 1:1 API.
+  - `IndieKitBilling` `object` 싱글턴 — Play Billing v7.1.1 위 얇은 래퍼.
+  - 진입점: `configure(context, products)` / `purchase(activity, productID)` / `restore()` / `owns(productID)` / `isPro` / `hasActiveSubscription` / `hasLifetime` / `expirationDate(productID)`.
+  - 상태 노출: `entitlements: StateFlow<Set<String>>` / `products: StateFlow<List<ProductDetails>>` / `isReady` / `isLoading`. Compose 는 `collectAsState` 한 줄.
+  - 핵심 흐름:
+    - 결제 후 자동 acknowledge (Play 정책상 3일 내 호출 필수 — 미호출 시 자동 환불).
+    - 보유 권한 새로 고침 — INAPP + SUBS 두 번 조회, 합집합.
+    - 구독 만료 timestamp 근사 — purchaseTime + ProductDetails 의 billingPeriod (ISO 8601 → ms).
+    - PurchasesUpdatedListener 콜백을 `CompletableDeferred` 로 suspend `purchase()` 함수와 연결.
+  - 자료: `ProductDescriptor` / `BillingProductType` (AutoRenewableSubscription / NonConsumable) / `PurchaseResult` (Success / UserCancelled / Pending) / `IndieKitBillingError` (NotConfigured / ProductNotFound / VerificationFailed / Underlying / AlreadyInProgress).
+- 외부 의존성 추가 (이 모듈에만):
+  - `billing-ktx:7.1.1` (api) — 사용처가 ProductDetails / Purchase 객체를 직접 만지는 경우가 있음.
+  - `kotlinx-coroutines-core:1.8.1` (api) — suspend 함수 + StateFlow.
+- 단위 테스트 6개 (iOS 자매 5개 + Android 고유 `isoPeriodToMs` 1개).
+
+### 검증 (모두 그린)
+
+- `./gradlew :indie-kit-billing:build :indie-kit-billing:test` — 통과 (테스트 6개 / 0 실패).
+- 데모 앱 (`Apps/IndieKitExample/indieKitDemo_Android/`) 의 실 폰 + Play Console 라이선스 테스터 흐름으로 다음 모두 확인:
+  - 평생 (NonConsumable) 구매 + 보유 중 표시.
+  - 월간 자동 갱신 구독 구매 + 만료일 표시 (약 1개월 후).
+  - 연간 자동 갱신 구독 구매 + 만료일 표시 (약 1년 후).
+  - 복원 — 보유 권한 그대로 유지.
+- 데모 앱 변경 (라이브러리 저장소 밖):
+  - `DemoApplication.kt` 에 `IndieKitBilling.configure(...)` 호출 (applicationScope 안에서).
+  - `MainActivity.kt` 에 결제 카드 + `BillingSection` / `PurchaseRow` Composable + 만료일 표시.
+  - 데모 앱을 Play Console 내부 테스트 트랙에 첫 출시 (검증용 라이선스 테스터 흐름).
+
+### 결정 사항
+
+- **Play Billing v7.1.1 으로 시작 (v8 아님).** PLAN.md 는 "v8" 명시했지만 v8 의 정확한 API 차이를 검증하지 않은 채 짜면 빌드 실패 위험. 일단 v7.1.1 안정 최신으로 검증 통과 → v8 마이그레이션은 별도 단계.
+- **`object` 싱글턴 + StateFlow.** iOS 의 `@Observable @MainActor IndieKitBilling.shared` 와 같은 위치. Compose 는 `collectAsState` 한 줄, 비-Compose 도 같은 진입점 그대로 사용 가능.
+- **`launchBillingFlow` 동시 진입 방지.** `PurchasesUpdatedListener` 가 콜백이라 동시 구매가 섞이면 어느 결과인지 매핑 불가. `pendingPurchase` `AtomicReference` + `AlreadyInProgress` 에러로 명시.
+- **구독 만료일 근사 계산.** Purchase 자체엔 만료일 없음. ProductDetails 의 billingPeriod (P1M / P1Y) + purchaseTime 으로 근사 — UI 표시용. 정확한 만료는 서버 측 RTDN — 출시 직전 백엔드 셋업과 같이.
+- **서버 영수증 검증 미포함.** iOS 와 같음. 5단계 (Auth) 의 백엔드 셋업과 묶어 `receiptVerifier` 클로저 자리로 추가 예정.
+
 ## [0.3.0] - 2026-05-19
 
 ### 추가 (3단계 IndieKitNetwork)
