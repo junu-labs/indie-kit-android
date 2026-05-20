@@ -40,6 +40,16 @@ kotlinxCoroutines = "1.8.1"
 #  - 시작은 v7.1.1 (안정 최신) — v8 마이그레이션은 별도 단계.
 playBilling = "7.1.1"
 
+# 5단계 추가 — Auth (Google Credential Manager + Kakao SDK).
+#  - androidx.credentials: Android 14+ 표준 인증 API. 옛 play-services-auth 의 후속.
+#  - credentials-play-services-auth: Credential Manager 가 Google Identity Services 와 통신할 수 있게 잇는 어댑터.
+#  - googleid: "Sign in with Google" 의 Credential 옵션 (GetGoogleIdOption). Credential Manager 와 같이 사용.
+#  - kakao SDK: 카카오 로그인 본체 (v2-user + v2-auth + v2-common).
+#  - 모두 안드로이드 전용. iOS 자매와 같은 API 모양 (configure / signIn / signOut / unlink) 으로 감쌈.
+androidxCredentials = "1.3.0"
+googleId = "1.1.1"
+kakaoSdk = "2.20.6"
+
 [libraries]
 # 단위 테스트 — 모든 모듈 공용 (모듈마다 PlaceholderTest 또는 실제 테스트에서 사용).
 junit = { group = "junit", name = "junit", version.ref = "junit" }
@@ -75,6 +85,16 @@ kotlinx-coroutines-core = { group = "org.jetbrains.kotlinx", name = "kotlinx-cor
 # 4단계 IndieKitBilling 가 끌어 쓸 Google Play Billing 라이브러리.
 #  - billing-ktx: Play Billing 의 Kotlin 확장. BillingClient / ProductDetails / Purchase 등 사용처 노출 형이라 api.
 play-billing-ktx = { group = "com.android.billingclient", name = "billing-ktx", version.ref = "playBilling" }
+
+# 5단계 IndieKitAuth 가 끌어 쓸 Credential Manager / Google ID / Kakao SDK.
+#  - androidx-credentials: Credential Manager 본체.
+#  - credentials-play-services-auth: Play Services 인증 어댑터 — Credential Manager 가 Google 계정에 접근.
+#  - googleid: GetGoogleIdOption + Google ID Token 자료 모델.
+#  - kakao-user / kakao-auth / kakao-common: 카카오 로그인 (카카오톡 앱 / 웹뷰 분기) + 토큰 / 프로필 API.
+androidx-credentials = { group = "androidx.credentials", name = "credentials", version.ref = "androidxCredentials" }
+androidx-credentials-play-services-auth = { group = "androidx.credentials", name = "credentials-play-services-auth", version.ref = "androidxCredentials" }
+googleid = { group = "com.google.android.libraries.identity.googleid", name = "googleid", version.ref = "googleId" }
+kakao-user = { group = "com.kakao.sdk", name = "v2-user", version.ref = "kakaoSdk" }
 
 [plugins]
 android-library = { id = "com.android.library", version.ref = "agp" }

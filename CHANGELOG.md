@@ -6,6 +6,46 @@
 
 ## [Unreleased]
 
+## [0.5.0-rc1] - 2026-05-20
+
+### 추가 (5단계 IndieKitAuth)
+
+- 라이브러리 본체 작성 — iOS 자매 와 1:1 API.
+  - `IndieKitAuth` `object` 싱글턴 — Credential Manager (Google) + kakao-sdk (Kakao) 위 얇은 래퍼.
+  - 진입점: `configure(context, googleServerClientId, kakaoNativeAppKey, backend)` / `signIn(activity, provider)` / `signOut(activity)` / `unlink(activity)`.
+  - 상태: `currentUser: StateFlow<AuthUser?>`, `isReady: StateFlow<Boolean>`.
+  - 자료: `AuthProvider` enum (GOOGLE / KAKAO — 안드로이드는 Apple 없음), `AuthUser` data class, `SessionTokens`, `SessionExchangeAdapter` data class.
+  - 오류: `IndieKitAuthError` sealed class — `ProviderNotConfigured` / `UserCancelled` / `MissingCredential` / `BackendExchange(underlying)` / `Underlying(underlying)`.
+  - 외부 의존성: `androidx.credentials 1.3.0` + `credentials-play-services-auth 1.3.0` + `googleid 1.1.1` + `com.kakao.sdk:v2-user 2.20.6` + `kotlinx-coroutines-core 1.8.1` + `okhttp 4.12.0`.
+  - 단위 테스트 10개 통과.
+- `settings.gradle.kts` — Kakao 자체 Maven 저장소 (`https://devrepo.kakao.com/...`) 한 줄 추가. Kakao SDK 가 Google Maven / Central 에 없음.
+
+### 검증 (실 폰 신원값 수신까지)
+
+- 데모 앱 (`Apps/IndieKitExample/indieKitDemo_Android/`) 의 실 폰 (안드로이드 디버그 APK) 에서 두 제공자 모두 통과:
+  - Google — Credential Manager 시스템 시트 → 계정 선택 → 동의 → 결과 카드에 id / displayName / idToken 수신.
+  - Kakao — 카카오톡 앱 또는 웹 폴백 → 동의 → 결과 카드에 id / displayName / email / idToken 수신.
+- 데모 앱 변경 (라이브러리 저장소 밖):
+  - `DemoApplication.kt` 에 `IndieKitAuth.configure(...)` 호출 — Google Web Client ID + Kakao Native App Key 채움. backend 는 이번 차례엔 null.
+  - `MainActivity.kt` 에 `AuthSection` Composable 추가 — Google / Kakao 두 버튼 + 결과 카드 (id / email / displayName / idToken 앞 60자 / serverSession 상태) + 본문 미리보기 카드 + 로그아웃 / 회원 탈퇴.
+
+### 검증 중 발견한 함정 (문서로 명시)
+
+- **Android Credential Manager 는 `setServerClientId` 에 Web 클라이언트 ID 가 필요** — Android 클라이언트 ID 가 아님. Google Cloud 콘솔에서 "OAuth 클라이언트 ID" 를 두 가지 만들어야 함:
+  - Android 클라이언트 (패키지명 + Debug SHA-1) — 콘솔 등록 / 검증용
+  - 웹 애플리케이션 클라이언트 — idToken audience 식별용. 코드의 `googleServerClientId` 에 이 ID 가 들어감
+- **Kakao SDK 저장소는 자체 Nexus 사용** — `https://devrepo.kakao.com/nexus/content/groups/public/`. `settings.gradle.kts` 의 `dependencyResolutionManagement.repositories` 에 한 줄 추가 안 하면 Gradle 이 의존성 못 찾음.
+
+### 새 문서
+
+- `AUTH_SETUP_Android.md` — Google + Kakao 콘솔 셋업 (Debug SHA-1 받는 법 + 키 해시 base64 변환 + 두 가지 Google 클라이언트 ID 차이) + Gradle 의존성 + 코드 호출 + 자주 막히는 곳. iOS 의 `AUTH_SETUP.md` 와 자매.
+
+### 미해결 (다음 차례)
+
+- 서버 세션 발급 검증 — `POST /auth/social-login/` 실 호출 + `currentUser.serverSession` 채워짐 확인. iOS 자매와 같이 주말 서버 셋업과 묶음.
+- IndieKitNetwork 자동 연결 검증 — `tokenProvider = { IndieKitAuth.accessToken }` 슬롯 동작 확인.
+- 정식 `v0.5.0` 태그 — 서버 검증 끝나면 발행. 이번은 `v0.5.0-rc1` 까지만.
+
 ## [0.4.0] - 2026-05-20
 
 ### 추가 (4단계 IndieKitBilling)

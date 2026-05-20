@@ -1,13 +1,17 @@
 // 역할
 //  - co.junu.indiekit.auth 패키지의 안드로이드 라이브러리.
-//  - 5단계 진입 시 Google + Kakao + Apple (Custom Tabs OAuth) 로그인 + 우리 서버 세션 발급 어댑터가 들어간다.
+//  - Google (Credential Manager + Sign in with Google) + Kakao (kakao-sdk) 로그인 + 우리 서버 세션 발급 어댑터.
+//  - 안드로이드는 Apple 로그인을 안 다룸 — iOS 자매 와 같은 API 의 GOOGLE / KAKAO 두 케이스만.
 //
-// 0단계 약속
-//  - 외부 의존성 0개 (Google ID / Kakao SDK 는 5단계에서 추가).
-//  - Placeholder.kt 만 들어 있다.
+// 외부 의존성 (5단계 진입)
+//  - androidx.credentials + credentials-play-services-auth: Credential Manager 본체 + Play Services 어댑터.
+//  - googleid: GetGoogleIdOption + GoogleIdTokenCredential.
+//  - kakao v2-user: 카카오 로그인 (카카오톡 앱 / 웹뷰 분기) + 토큰 / 사용자 정보 API.
+//  - kotlinx-coroutines-core: suspend 함수 (Credential Manager + Kakao 콜백 감싸기).
+//  - kotlinx-serialization-json: SessionExchangeAdapter 의 응답 디코딩 도우미.
 //
 // 발행 좌표
-//  - co.junu:indie-kit-auth:{VERSION_NAME}.
+//  - kr.co.junu:indie-kit-auth:{VERSION_NAME}.
 
 import com.vanniktech.maven.publish.AndroidSingleVariantLibrary
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
@@ -15,6 +19,7 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.maven.publish)
 }
 
@@ -51,6 +56,26 @@ kotlin {
 
 dependencies {
     api(project(":indie-kit-core"))
+
+    // Credential Manager — Google "Sign in with Google" 의 표준 진입점.
+    //  사용처 (앱) 가 GoogleIdTokenCredential / GetGoogleIdOption 을 직접 만질 일은 없어 implementation.
+    implementation(libs.androidx.credentials)
+    implementation(libs.androidx.credentials.play.services.auth)
+    implementation(libs.googleid)
+
+    // 카카오 로그인 — UserApi / AuthApi / OAuthToken / User 자료가 라이브러리 사용자에게도 노출되는 경우가 있어 api.
+    api(libs.kakao.user)
+
+    // suspend 함수 / withContext(Dispatchers.IO).
+    api(libs.kotlinx.coroutines.core)
+
+    // SessionExchangeAdapter 가 응답을 디코딩할 때 사용처가 @Serializable data class 를 정의하므로 api 노출.
+    api(libs.kotlinx.serialization.json)
+
+    // SessionExchangeAdapter 가 우리 서버로 POST 호출 — OkHttp 직접 사용.
+    // (IndieKitNetwork 와 같은 인스턴스를 공유할 수도 있지만 기본은 자체 인스턴스.)
+    implementation(libs.okhttp)
+
     testImplementation(libs.junit)
 }
 

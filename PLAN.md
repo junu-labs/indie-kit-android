@@ -1,12 +1,12 @@
 # indie-kit-android — 공용 라이브러리 5개 만들기
 
-> **상태 (2026-05-19):**
+> **상태 (2026-05-20):**
 > - 0단계 부트스트랩 — 완료 (`v0.0.1`)
 > - 1단계 IndieKitAnalytics — 라이브러리 + 데모 검증 완료 (`v0.1.0`)
 > - 2단계 IndieKitAds — 라이브러리 + 데모 검증 완료, Native 패치 반복 (`v0.2.7` 까지)
 > - 3단계 IndieKitNetwork — 라이브러리 본체 + 데모 검증 완료 (`v0.3.0`)
-> - 4단계 IndieKitBilling — **라이브러리 본체 + 데모 검증 완료 (`v0.4.0`)**
-> - 5단계 IndieKitAuth — 라이브러리 미착수
+> - 4단계 IndieKitBilling — 라이브러리 본체 + 데모 검증 완료 (`v0.4.0`)
+> - 5단계 IndieKitAuth — 라이브러리 본체 + 데모 신원값 수신 검증 완료 (`v0.5.0-rc1`) — 서버 세션 발급 검증 대기
 >
 > **저장소:** `junu-labs/indie-kit-android` (Gradle 멀티 모듈 + JitPack)
 > **자매 저장소:** `junu-labs/indie-kit-ios` — 같은 단계 / 같은 진입점 이름.

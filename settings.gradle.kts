@@ -35,6 +35,9 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        // Kakao SDK (com.kakao.sdk:*) 는 Google Maven / Central 에 없고 자체 Nexus 저장소를 쓴다.
+        // 5단계 (IndieKitAuth) 에서 v2-user 등을 끌어 쓰려면 이 자리 필요.
+        maven { url = uri("https://devrepo.kakao.com/nexus/content/groups/public/") }
     }
 }
 
