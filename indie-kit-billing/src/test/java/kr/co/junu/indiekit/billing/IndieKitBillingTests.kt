@@ -5,11 +5,12 @@
  *  - Play Billing 자체 동작 (구매 / 갱신 / 복원) 은 실 폰 + Play Console 의 라이선스 테스터 통합 테스트에서.
  *  - 여기서는 ProductDescriptor / IndieKitBillingError / 초기 상태 / isoPeriodToMs 등 라이브러리 표면만 검증.
  *
- * iOS 자매 (IndieKitBillingTests.swift) 의 5개 테스트 + Android 고유 헬퍼 (isoPeriodToMs) 1개 추가 — 총 6개.
+ * iOS 자매 (IndieKitBillingTests.swift) 의 6개 테스트 + Android 고유 헬퍼 (isoPeriodToMs) 1개 추가 — 총 7개.
  */
 
 package kr.co.junu.indiekit.billing
 
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
@@ -114,5 +115,19 @@ class IndieKitBillingTests {
         // 형식 깨진 입력은 0 반환.
         assertEquals(0L, IndieKitBilling.isoPeriodToMs("XYZ"))
         assertEquals(0L, IndieKitBilling.isoPeriodToMs(""))
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // 7. refresh() — configure 전 (billingClient == null) 에도 안전한 no-op
+    // ─────────────────────────────────────────────────────────────────
+
+    @Test
+    fun `refresh 가 configure 전에도 예외 없이 통과한다`() = runBlocking {
+        // billingClient 가 null 이면 내부 refreshEntitlements 가 조용히 return → 예외 / 상태 오염 없음.
+        // (object 싱글턴이라 다른 테스트가 configure 했을 수 있으므로 절대값 단언 대신
+        //  비존재 productID 미보유 + entitlements non-null 안전성만 단언 — 5번 테스트와 같은 패턴.)
+        IndieKitBilling.refresh()
+        assertFalse(IndieKitBilling.owns("kr.co.junu.nonexistent.product"))
+        assertNotNull(IndieKitBilling.entitlements.value)
     }
 }

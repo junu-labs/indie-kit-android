@@ -337,6 +337,31 @@ public object IndieKitBilling {
     }
 
     // ─────────────────────────────────────────────────────────────────────
+    // 조용한 재확인 (다이얼로그 없음)
+    // ─────────────────────────────────────────────────────────────────────
+
+    /**
+     * 보유 권한을 조용히 다시 확인한다. 결제 / 복원 다이얼로그를 띄우지 않는다.
+     *
+     * restore() 와의 구분
+     *  - restore() = **사용자 버튼**. 이전 구매를 명시적으로 다시 끌어온다. (iOS 자매는 여기서
+     *    App Store 암호창이 뜸 — Android 는 queryPurchasesAsync 만이라 암호창은 안 뜨지만,
+     *    "사용자가 누르는 복원" 이라는 역할은 같다. _isLoading 스피너도 켠다.)
+     *  - refresh() = **조용한 자동 재확인**. queryPurchasesAsync (INAPP+SUBS) 로 현재 보유 상태만
+     *    다시 읽는다. _isLoading 을 켜지 않아 UI 방해가 없으므로, 앱이 포그라운드로 돌아올 때마다
+     *    (onResume / ON_RESUME) 호출해도 안전하다.
+     *
+     * 쓰임새 — 구독 취소 후 만료 시점이 지나면, 앱을 껐다 켜지 않고 포그라운드 복귀만으로도
+     * isPro 가 false 로 정확히 떨어지게 한다.
+     *
+     * configure 전 (billingClient == null) 에 불려도 안전 — 내부 refreshEntitlements 가 조용히 return.
+     * iOS 자매의 IndieKitBilling.shared.refresh() 와 1:1 대칭.
+     */
+    public suspend fun refresh() {
+        refreshEntitlements()
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
     // 내부 헬퍼 — Play Billing 콜백을 suspend 로 wrap
     // ─────────────────────────────────────────────────────────────────────
 

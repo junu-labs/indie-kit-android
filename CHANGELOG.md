@@ -6,6 +6,20 @@
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-06-05
+
+### 추가 (IndieKitBilling — 구독 만료 정확성)
+
+- `IndieKitBilling.refresh()` 공개 메서드 추가 — 보유 권한을 조용히 다시 확인한다. iOS 자매와 1:1 대칭.
+  - `restore()` 와 역할이 다르다. `restore()` 는 사용자가 누르는 "구매 복원" 용이고, `refresh()` 는 `queryPurchasesAsync` 만 다시 불러 현재 보유 상태를 읽는 조용한 자동 재확인이다. 둘 다 다이얼로그를 띄우지 않지만 (Android 는 iOS 와 달리 `restore()` 도 암호창이 없음), 역할 구분은 같다. `refresh()` 는 `_isLoading` 스피너도 켜지 않아 포그라운드 복귀 (onResume) 마다 호출해도 안전하다.
+  - 효과 — 사용자가 구독을 취소하고 만료가 지나면, 앱을 껐다 켜지 않고 포그라운드 복귀만으로도 `isPro` 가 false 로 정확히 떨어진다.
+
+### 검증
+
+- 단위 테스트 1개 추가 — `refresh()` 가 configure 전에도 안전 (총 7개 통과).
+- 데모 앱 변경 (라이브러리 저장소 밖) — `MainActivity` 의 Activity 생명주기 `ON_RESUME` 에서 `IndieKitBilling.refresh()` 호출. `ProcessLifecycleOwner` 대신 Activity 생명주기를 쓴 이유는 데모에 `lifecycle-process` 의존성이 없고 단일 Activity 라서. 로컬 라이브러리 (composite build) 로 데모 컴파일 통과 확인.
+- `VERSION_NAME` 을 `0.5.1` 로 맞춤 (이전 `0.2.7` 은 CHANGELOG 진척과 어긋나 있던 값 — 정렬).
+
 ## [0.5.0-rc1] - 2026-05-20
 
 ### 추가 (5단계 IndieKitAuth)
