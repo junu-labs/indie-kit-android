@@ -13,7 +13,8 @@
  * 사용 방법
  *  ```kotlin
  *  if (!subscription.isPro) {
- *      BannerAdView(modifier = Modifier.fillMaxWidth().height(50.dp))
+ *      BannerAdView(modifier = Modifier.fillMaxWidth().height(50.dp))                      // 기본 자리
+ *      BannerAdView(modifier = Modifier.fillMaxWidth().height(50.dp), placement = "home")  // 자리별 ID
  *  }
  *  ```
  *
@@ -30,6 +31,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -37,7 +39,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import kr.co.junu.indiekit.core.AnalyticsBus
 import kr.co.junu.indiekit.core.IKLogger
-import kr.co.junu.indiekit.core.analyticsParams
 import com.google.android.gms.ads.AdListener
 import com.google.android.gms.ads.AdRequest
 import com.google.android.gms.ads.AdSize
@@ -49,9 +50,11 @@ import com.google.android.gms.ads.LoadAdError
  *
  * @param modifier Compose Modifier. 보통 `Modifier.fillMaxWidth()` 로 가로 가득.
  *                 높이는 안 적으면 AdView 가 자기 광고 크기 (50dp) 만큼 차지.
+ * @param placement configure 의 `bannerAdUnitIDs` 에 등록한 자리 이름 (예: "home").
+ *                  생략하면 기본 배너 ID 사용.
  */
 @Composable
-public fun BannerAdView(modifier: Modifier = Modifier) {
+public fun BannerAdView(modifier: Modifier = Modifier, placement: String? = null) {
     val context = LocalContext.current
 
     // configure 안 한 상태면 placeholder Box — 광고 미표시.
@@ -60,40 +63,44 @@ public fun BannerAdView(modifier: Modifier = Modifier) {
         return
     }
 
-    val adView = remember {
-        AdView(context).apply {
-            setAdSize(AdSize.BANNER)
-            adUnitId = IndieKitAds.resolvedBannerAdUnitID(context)
-            adListener = object : AdListener() {
-                override fun onAdLoaded() {
-                    IKLogger.ads.info("배너 광고 적재 성공")
-                    AnalyticsBus.record("ad_loaded", analyticsParams("format" to "banner"))
-                }
+    // 자리 이름이 바뀌면 key 가 subtree 를 통째로 새로 만들어,
+    // 새 AdView 가 그 자리의 ID 로 다시 적재되고 옛 AdView 는 onDispose 에서 정리됨.
+    key(placement) {
+        val adView = remember {
+            AdView(context).apply {
+                setAdSize(AdSize.BANNER)
+                adUnitId = IndieKitAds.resolvedBannerAdUnitID(context, placement)
+                adListener = object : AdListener() {
+                    override fun onAdLoaded() {
+                        IKLogger.ads.info("배너 광고 적재 성공 (자리: ${placement ?: "기본"})")
+                        AnalyticsBus.record("ad_loaded", adAnalyticsParams("banner", placement))
+                    }
 
-                override fun onAdFailedToLoad(error: LoadAdError) {
-                    IKLogger.ads.warning("배너 광고 적재 실패: ${error.message}")
-                }
+                    override fun onAdFailedToLoad(error: LoadAdError) {
+                        IKLogger.ads.warning("배너 광고 적재 실패: ${error.message}")
+                    }
 
-                override fun onAdImpression() {
-                    AnalyticsBus.record("ad_impression", analyticsParams("format" to "banner"))
+                    override fun onAdImpression() {
+                        AnalyticsBus.record("ad_impression", adAnalyticsParams("banner", placement))
+                    }
                 }
+                loadAd(AdRequest.Builder().build())
             }
-            loadAd(AdRequest.Builder().build())
         }
-    }
 
-    AndroidView(
-        modifier = modifier,
-        factory = { adView },
-        update = {
-            // 갱신할 게 없음 — 광고 ID 는 configure 시점에 한 번 결정.
-        }
-    )
+        AndroidView(
+            modifier = modifier,
+            factory = { adView },
+            update = {
+                // 갱신할 게 없음 — 광고 ID 는 AdView 를 만들 때 한 번 결정.
+            }
+        )
 
-    // 화면을 떠날 때 AdView 정리 — 메모리 누수 방지.
-    DisposableEffect(adView) {
-        onDispose {
-            adView.destroy()
+        // 화면을 떠날 때 AdView 정리 — 메모리 누수 방지.
+        DisposableEffect(adView) {
+            onDispose {
+                adView.destroy()
+            }
         }
     }
 }

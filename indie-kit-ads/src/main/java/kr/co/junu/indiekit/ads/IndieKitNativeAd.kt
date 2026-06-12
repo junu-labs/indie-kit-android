@@ -54,7 +54,6 @@ import com.google.android.gms.ads.nativead.NativeAd
 import com.google.android.gms.ads.nativead.NativeAdOptions
 import kr.co.junu.indiekit.core.AnalyticsBus
 import kr.co.junu.indiekit.core.IKLogger
-import kr.co.junu.indiekit.core.analyticsParams
 
 // ────────────────────────────────────────────────────────────────────────────
 // 진입점 1: 자동 적재 + 기본 UI — 사용자가 한 줄로
@@ -65,21 +64,24 @@ import kr.co.junu.indiekit.core.analyticsParams
  *
  * 사용 방법
  *  ```kotlin
- *  NativeAdView(modifier = Modifier.fillMaxWidth())
+ *  NativeAdView(modifier = Modifier.fillMaxWidth())                      // 기본 자리
+ *  NativeAdView(modifier = Modifier.fillMaxWidth(), placement = "feed")  // 자리별 ID
  *  ```
  *
  * 직접 레이아웃을 그리고 싶으면 `loadNativeAd(context, onAdLoaded)` 로 NativeAd 를 받고,
  * 같은 패키지의 `NativeAdView(nativeAd, modifier, content)` (Google 공식) 에 자기 content 를 넘긴다.
+ *
+ * @param placement configure 의 `nativeAdUnitIDs` 에 등록한 자리 이름. 생략하면 기본 Native ID.
  */
 @Composable
-public fun NativeAdView(modifier: Modifier = Modifier) {
+public fun NativeAdView(modifier: Modifier = Modifier, placement: String? = null) {
     val context = LocalContext.current
     var nativeAd by remember { mutableStateOf<NativeAd?>(null) }
     var isDisposed by remember { mutableStateOf(false) }
 
-    DisposableEffect(Unit) {
+    DisposableEffect(placement) {
         if (IndieKitAds.isConfigured) {
-            loadNativeAd(context) { ad ->
+            loadNativeAd(context, placement) { ad ->
                 if (!isDisposed) {
                     nativeAd = ad
                 } else {
@@ -108,15 +110,21 @@ public fun NativeAdView(modifier: Modifier = Modifier) {
  *
  * 직접 호출은 권장하지 않음 — 보통 `NativeAdView(modifier)` 한 줄이면 충분.
  * 여러 개 미리 적재하거나 LazyColumn 안에서 슬롯마다 다른 광고를 쓰려는 경우 등에만 사용.
+ *
+ * @param placement configure 의 `nativeAdUnitIDs` 에 등록한 자리 이름. null 이면 기본 Native ID.
  */
-public fun loadNativeAd(context: Context, onAdLoaded: (NativeAd) -> Unit) {
-    val adUnitID = IndieKitAds.resolvedNativeAdUnitID(context)
+public fun loadNativeAd(
+    context: Context,
+    placement: String? = null,
+    onAdLoaded: (NativeAd) -> Unit
+) {
+    val adUnitID = IndieKitAds.resolvedNativeAdUnitID(context, placement)
     val adLoader = AdLoader.Builder(context.applicationContext, adUnitID)
         .forNativeAd { ad -> onAdLoaded(ad) }
         .withAdListener(object : AdListener() {
             override fun onAdLoaded() {
-                IKLogger.ads.info("Native 광고 적재 성공")
-                AnalyticsBus.record("ad_loaded", analyticsParams("format" to "native"))
+                IKLogger.ads.info("Native 광고 적재 성공 (자리: ${placement ?: "기본"})")
+                AnalyticsBus.record("ad_loaded", adAnalyticsParams("native", placement))
             }
 
             override fun onAdFailedToLoad(error: LoadAdError) {
@@ -124,11 +132,11 @@ public fun loadNativeAd(context: Context, onAdLoaded: (NativeAd) -> Unit) {
             }
 
             override fun onAdImpression() {
-                AnalyticsBus.record("ad_impression", analyticsParams("format" to "native"))
+                AnalyticsBus.record("ad_impression", adAnalyticsParams("native", placement))
             }
 
             override fun onAdClicked() {
-                AnalyticsBus.record("ad_clicked", analyticsParams("format" to "native"))
+                AnalyticsBus.record("ad_clicked", adAnalyticsParams("native", placement))
             }
         })
         // AdChoices 아이콘을 우상단에 명시적으로 배치 — Google 정책 권장 위치.

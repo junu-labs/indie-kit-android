@@ -6,6 +6,19 @@
 
 ## [Unreleased]
 
+### 추가 (IndieKitAds — 자리 (placement) 별 광고 ID)
+
+- 같은 종류의 광고를 화면마다 다른 ID 로 분리할 수 있게 됨 (예: 배너를 홈 / 상세 / 설정 화면에 각각 다른 ID 로). 자리별로 AdMob 보고서가 분리되어 어느 화면 광고가 돈을 버는지 보인다. iOS 자매와 같은 API 모양 (짝 맞추기).
+  - `configure` 에 `bannerAdUnitIDs` / `interstitialAdUnitIDs` / `rewardedAdUnitIDs` / `nativeAdUnitIDs` (자리 이름 → `AdUnitID` 묶음) 매개변수 추가. 기존 단일 ID 매개변수는 "기본 자리" 로 그대로 동작 — 기존 호출 코드 수정 불필요.
+  - `BannerAdView(placement = ...)`, `NativeAdView(placement = ...)`, `loadNativeAd(context, placement) { }`, `showInterstitial(activity, placement)`, `showRewarded(activity, placement)` — 자리 이름으로 띄움. 생략 시 기본 ID.
+  - 등록 안 된 자리 이름은 경고 로그 후 기본 ID 로 대체 (크래시 없음).
+  - 전면 / 리워드는 자리마다 적재기를 따로 두고 (`InterstitialAdLoader` / `RewardedAdLoader` 가 object 싱글턴 → 자리별 보관소로 바뀜) configure 때 기본 자리 + 등록한 모든 자리를 각각 미리 적재.
+  - 광고 통계 이벤트 (`ad_loaded` / `ad_impression` / `ad_dismissed` / `ad_clicked` / `ad_reward_earned`) 에 `placement` 칸 추가 — Firebase 보고서에서 자리별 분리 가능.
+
+### 검증
+
+- 단위 테스트 2개 추가 — 자리 선택 규칙 (기본 / 등록된 자리 / 모르는 자리), configure 전 자리별 적재 상태 false. `testDebugUnitTest` 통과. 실 광고 노출은 데모 앱 검증 대기.
+
 ## [0.5.1] - 2026-06-05
 
 ### 추가 (IndieKitBilling — 구독 만료 정확성)

@@ -102,4 +102,32 @@ class IndieKitAdsTests {
         assertFalse(IndieKitAds.isInterstitialReady)
         assertFalse(IndieKitAds.isRewardedReady)
     }
+
+    /** 자리 (placement) 선택 규칙 — null 은 기본 ID, 등록된 자리는 그 자리 ID, 모르는 자리는 기본 ID 로 대체. */
+    @Test
+    fun `selectAdUnitID picks by placement`() {
+        val defaultID = AdUnitID(debug = "ca-app-pub-default")
+        val homeID = AdUnitID(debug = "ca-app-pub-home")
+        val placements = mapOf("home" to homeID)
+
+        assertEquals(
+            defaultID,
+            IndieKitAds.selectAdUnitID(placements, defaultID, placement = null, format = "배너")
+        )
+        assertEquals(
+            homeID,
+            IndieKitAds.selectAdUnitID(placements, defaultID, placement = "home", format = "배너")
+        )
+        assertEquals(
+            defaultID,
+            IndieKitAds.selectAdUnitID(placements, defaultID, placement = "unknown", format = "배너")
+        )
+    }
+
+    /** 자리 이름으로 묻는 적재 상태도 configure 전엔 false. */
+    @Test
+    fun `before configure ready flags by placement are false`() {
+        assertFalse(IndieKitAds.isInterstitialReady(placement = "home"))
+        assertFalse(IndieKitAds.isRewardedReady(placement = "home"))
+    }
 }

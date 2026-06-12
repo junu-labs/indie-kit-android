@@ -31,8 +31,23 @@ import com.google.android.gms.ads.LoadAdError
 import com.google.android.gms.ads.rewarded.RewardedAd
 import com.google.android.gms.ads.rewarded.RewardedAdLoadCallback
 
-/** 리워드 광고 매니저. object 싱글턴. */
-internal object RewardedAdLoader {
+/** 리워드 광고 매니저. 자리 (placement) 마다 한 개. */
+internal class RewardedAdLoader private constructor(
+    /** 이 적재기가 담당하는 자리 이름. null = 기본 자리. */
+    private val placement: String?
+) {
+
+    companion object {
+        /** 기본 자리 (placement null) 의 보관 키. */
+        private const val DEFAULT_KEY = "__default__"
+
+        /** 자리 이름 → 적재기 보관소. */
+        private val loaders = java.util.concurrent.ConcurrentHashMap<String, RewardedAdLoader>()
+
+        /** 자리 이름에 해당하는 적재기를 꺼낸다. 없으면 만들어 보관. */
+        fun loader(placement: String?): RewardedAdLoader =
+            loaders.getOrPut(placement ?: DEFAULT_KEY) { RewardedAdLoader(placement) }
+    }
 
     /** 적재된 리워드 광고 인스턴스. */
     @Volatile
@@ -56,7 +71,7 @@ internal object RewardedAdLoader {
     // ────────────────────────────────────────────────────────────────────────
 
     fun preload(context: Context) {
-        val adUnitID = IndieKitAds.resolvedRewardedAdUnitID(context)
+        val adUnitID = IndieKitAds.resolvedRewardedAdUnitID(context, placement)
         RewardedAd.load(
             context.applicationContext,
             adUnitID,
@@ -65,8 +80,8 @@ internal object RewardedAdLoader {
                 override fun onAdLoaded(loaded: RewardedAd) {
                     ad = loaded
                     loaded.fullScreenContentCallback = makeFullScreenCallback(context)
-                    IKLogger.ads.info("리워드 광고 적재 성공")
-                    AnalyticsBus.record("ad_loaded", analyticsParams("format" to "rewarded"))
+                    IKLogger.ads.info("리워드 광고 적재 성공 (자리: ${placement ?: "기본"})")
+                    AnalyticsBus.record("ad_loaded", adAnalyticsParams("rewarded", placement))
                 }
 
                 override fun onAdFailedToLoad(error: LoadAdError) {
@@ -105,7 +120,7 @@ internal object RewardedAdLoader {
             IKLogger.ads.info("리워드 광고 보상 지급: ${reward.type} × ${reward.amount}")
             AnalyticsBus.record(
                 "ad_reward_earned",
-                analyticsParams("format" to "rewarded", "reward_type" to reward.type)
+                adAnalyticsParams("rewarded", placement) + analyticsParams("reward_type" to reward.type)
             )
         }
         IKLogger.ads.info("리워드 광고 표시")
@@ -118,11 +133,11 @@ internal object RewardedAdLoader {
     private fun makeFullScreenCallback(context: Context): FullScreenContentCallback {
         return object : FullScreenContentCallback() {
             override fun onAdImpression() {
-                AnalyticsBus.record("ad_impression", analyticsParams("format" to "rewarded"))
+                AnalyticsBus.record("ad_impression", adAnalyticsParams("rewarded", placement))
             }
 
             override fun onAdDismissedFullScreenContent() {
-                AnalyticsBus.record("ad_dismissed", analyticsParams("format" to "rewarded"))
+                AnalyticsBus.record("ad_dismissed", adAnalyticsParams("rewarded", placement))
                 val reward = earnedReward
                 val callback = resultCallback
                 earnedReward = null
