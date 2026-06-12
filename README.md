@@ -208,7 +208,7 @@ export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
 
 | 버전 | 날짜 | 무엇을 했나 |
 |---|---|---|
-| Unreleased | 2026-06-12 | `indie-kit-ads` — 자리 (placement) 별 광고 ID 지원. 같은 종류의 광고를 화면마다 다른 ID 로 분리 (configure 의 `*AdUnitIDs` 묶음 + `placement` 매개변수). 기존 호출 코드는 그대로 동작. iOS 자매와 같은 API 모양. 데모 앱 검증 대기. |
+| `v0.6.0` | 2026-06-12 | `indie-kit-ads` — 자리 (placement) 별 광고 ID 지원. 같은 종류의 광고를 화면마다 다른 ID 로 분리 (configure 의 `*AdUnitIDs` 묶음 + `placement` 매개변수). 기존 호출 코드는 그대로 동작. iOS 자매와 같은 API 모양. 데모 앱 검증 대기. |
 | **`v0.2.7`** | 2026-05-12 | **2단계 IndieKitAds 실기기 검증 완료** — AdMob native ad validator "No implementation issues found" 통과. 라이브러리 기본 UI 에 TouchCart 출처 측정 패턴 3가지 (`IntrinsicSize.Min` / `mediaContent` null 체크 + `sizeIn(maxHeight = 120.dp)` / `NativeAdOptions.ADCHOICES_TOP_RIGHT`) 흡수. `NativeAdView.kt` 는 [Google 공식 compose_utils/NativeAdView.kt](https://github.com/googleads/googleads-mobile-android-examples/blob/main/kotlin/advanced/JetpackComposeDemo/app/src/main/java/com/google/android/gms/example/jetpackcomposedemo/formats/compose_utils/NativeAdView.kt) 와 한 글자 안 다른 상태로 유지, 라이브러리 추가물은 같은 패키지의 `IndieKitNativeAd.kt` 로 분리. 빌드 도구 AGP 9.1.1 / Gradle 9.3.1 통일. (v0.2.1 ~ v0.2.6 은 같은 풍선 풀려고 시도한 hotfix 6번, 모두 빗나감 — 검증 통과 패턴이 측정 쪽에 있다는 단서를 한 번에 잡지 못한 결과.) |
 | `v0.2.0` | 2026-05-11 | 2단계 IndieKitAds 라이브러리 완성. AdMob 4종 광고 (배너 / 전면 / 리워드 / Native — Native 는 안드로이드 선행) + 유럽 광고 동의창 (UMP) + Compose 진입점 (`BannerAdView`, `NativeAdView`) + AnalyticsBus 자동 연결. |
 | `v0.1.0` | 2026-05-11 | 1단계 IndieKitAnalytics — Firebase Analytics 한 줄 추상화 (`logScreen` / `log` / `logLogin` / `logSignUp` / `logPurchase` / `setUserId` / `setUserProperty`). AnalyticsBus 등록 통로 마련. |

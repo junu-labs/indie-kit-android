@@ -4,7 +4,7 @@
 
 자매 저장소: [`indie-kit-ios`](https://github.com/junu-labs/indie-kit-ios). iOS 와 단계 번호가 1:1 대칭이며, 같은 단계라도 데모 검증 시점이 다르면 태그 번호가 어긋날 수 있다.
 
-## [Unreleased]
+## [0.6.0] - 2026-06-12
 
 ### 추가 (IndieKitAds — 자리 (placement) 별 광고 ID)
 
