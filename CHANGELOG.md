@@ -4,6 +4,12 @@
 
 자매 저장소: [`indie-kit-ios`](https://github.com/junu-labs/indie-kit-ios). iOS 와 단계 번호가 1:1 대칭이며, 같은 단계라도 데모 검증 시점이 다르면 태그 번호가 어긋날 수 있다.
 
+## [0.7.1] - 2026-06-25
+
+### 고침 (빌드 — JitPack JDK 고정)
+
+- `jitpack.yml` 추가로 빌드 JDK 를 openjdk17 로 고정했다. 이게 없으면 JitPack 기본 JDK(이미지에서 사라진 oracle 17.0.12)로 출시본 빌드가 깨진다. 코드 변경 없음 — 0.7.0 과 라이브러리 내용은 같고 출시 빌드 환경만 고친 판이다. (iOS 는 Swift Package 소스 빌드라 영향 없음 — v0.7.0 그대로.)
+
 ## [0.7.0] - 2026-06-25
 
 ### 바뀜 (IndieKitAds — 광고 ID 설정 정리. 기존 호출 코드 수정 필요)
