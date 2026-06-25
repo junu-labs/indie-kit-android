@@ -68,7 +68,13 @@ internal class InterstitialAdLoader private constructor(
      * 이후 광고 닫힘 콜백에서도 자동 호출되어 다음 광고를 항상 준비된 상태로 유지.
      */
     fun preload(context: Context) {
+        // 출시 빌드인데 운영 ID 가 없으면 null — 적재하지 않는다. isLoaded 가 false 라 showIfLoaded 는 즉시 통과.
         val adUnitID = IndieKitAds.resolvedInterstitialAdUnitID(context, placement)
+        if (adUnitID == null) {
+            IKLogger.ads.debug("전면 광고 ID 없음 — 적재 안 함")
+            ad = null
+            return
+        }
         InterstitialAd.load(
             context.applicationContext,
             adUnitID,

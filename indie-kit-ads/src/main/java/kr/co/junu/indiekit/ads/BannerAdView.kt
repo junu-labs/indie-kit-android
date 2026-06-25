@@ -63,13 +63,21 @@ public fun BannerAdView(modifier: Modifier = Modifier, placement: String? = null
         return
     }
 
+    // 출시 빌드인데 운영 ID 가 없으면 null — 광고를 적재하지 않고 빈 Box 로 둔다 (테스트 광고 노출 방지).
+    val adUnitID = IndieKitAds.resolvedBannerAdUnitID(context, placement)
+    if (adUnitID == null) {
+        IKLogger.ads.debug("배너 광고 ID 없음 — 표시 안 함")
+        Box(modifier = modifier.height(50.dp))
+        return
+    }
+
     // 자리 이름이 바뀌면 key 가 subtree 를 통째로 새로 만들어,
     // 새 AdView 가 그 자리의 ID 로 다시 적재되고 옛 AdView 는 onDispose 에서 정리됨.
     key(placement) {
         val adView = remember {
             AdView(context).apply {
                 setAdSize(AdSize.BANNER)
-                adUnitId = IndieKitAds.resolvedBannerAdUnitID(context, placement)
+                adUnitId = adUnitID
                 adListener = object : AdListener() {
                     override fun onAdLoaded() {
                         IKLogger.ads.info("배너 광고 적재 성공 (자리: ${placement ?: "기본"})")

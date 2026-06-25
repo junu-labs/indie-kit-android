@@ -71,7 +71,13 @@ internal class RewardedAdLoader private constructor(
     // ────────────────────────────────────────────────────────────────────────
 
     fun preload(context: Context) {
+        // 출시 빌드인데 운영 ID 가 없으면 null — 적재하지 않는다. isLoaded 가 false 라 showIfLoaded 는 보상 없이 통과.
         val adUnitID = IndieKitAds.resolvedRewardedAdUnitID(context, placement)
+        if (adUnitID == null) {
+            IKLogger.ads.debug("리워드 광고 ID 없음 — 적재 안 함")
+            ad = null
+            return
+        }
         RewardedAd.load(
             context.applicationContext,
             adUnitID,

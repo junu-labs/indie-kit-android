@@ -118,7 +118,12 @@ public fun loadNativeAd(
     placement: String? = null,
     onAdLoaded: (NativeAd) -> Unit
 ) {
+    // 출시 빌드인데 운영 ID 가 없으면 null — 광고를 적재하지 않는다 (테스트 광고 노출 방지).
     val adUnitID = IndieKitAds.resolvedNativeAdUnitID(context, placement)
+    if (adUnitID == null) {
+        IKLogger.ads.debug("Native 광고 ID 없음 — 표시 안 함")
+        return
+    }
     val adLoader = AdLoader.Builder(context.applicationContext, adUnitID)
         .forNativeAd { ad -> onAdLoaded(ad) }
         .withAdListener(object : AdListener() {

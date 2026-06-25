@@ -9,7 +9,7 @@
 | 모듈 | 무엇을 해 주는가 | 단계 | 상태 |
 |---|---|---|---|
 | `indie-kit-analytics` | Firebase Analytics — 화면 이동 / 이벤트 / 사용자 속성 | 1 | `v0.1.0` (라이브러리 완성, SolTi 검증 예정) |
-| `indie-kit-ads` | AdMob 배너 / 전면 / 리워드 / Native + 유럽 광고 동의창 | 2 | **`v0.2.7` (실기기 검증 완료 — AdMob native validator "No implementation issues found" 통과)** |
+| `indie-kit-ads` | AdMob 배너 / 전면 / 리워드 / Native + 유럽 광고 동의창 | 2 | **`v0.6.0` (검증 완료 — 실기기 v0.2.7 + 자리 (placement) 별 광고 ID 는 v0.6.0 에뮬레이터)** |
 | `indie-kit-network` | OkHttp 위 얇은 호출 묶음 + 인증값 자동 갱신 | 3 | 라이브러리 미착수 |
 | `indie-kit-billing` | Play Billing v8 — 구독 / 1회성 / 평생 결제 | 4 | 라이브러리 미착수 |
 | `indie-kit-auth` | 카카오 / 구글 / 애플 로그인 + 우리 서버 세션 발급 | 5 | 라이브러리 미착수 |
@@ -75,10 +75,18 @@ import kr.co.junu.indiekit.ads.NativeAdView
 // Application.onCreate 에서 한 번:
 IndieKitAds.configure(
     context = this,
-    bannerAdUnitID       = AdUnitID(release = "ca-app-pub-..."),
-    interstitialAdUnitID = AdUnitID(release = "ca-app-pub-..."),
-    rewardedAdUnitID     = AdUnitID(release = "ca-app-pub-..."),
-    nativeAdUnitID       = AdUnitID(release = "ca-app-pub-..."),
+    bannerAdUnitIDs = mapOf(
+        IndieKitAds.DEFAULT_PLACEMENT to AdUnitID(release = "ca-app-pub-...")
+    ),
+    interstitialAdUnitIDs = mapOf(
+        IndieKitAds.DEFAULT_PLACEMENT to AdUnitID(release = "ca-app-pub-...")
+    ),
+    rewardedAdUnitIDs = mapOf(
+        IndieKitAds.DEFAULT_PLACEMENT to AdUnitID(release = "ca-app-pub-...")
+    ),
+    nativeAdUnitIDs = mapOf(
+        IndieKitAds.DEFAULT_PLACEMENT to AdUnitID(release = "ca-app-pub-...")
+    ),
     requestConsent = true
 )
 
@@ -113,26 +121,30 @@ IndieKitAds.showRewarded(activity) { reward ->
 IndieKitAds.requestConsentForm(activity) { error -> /* EEA 동의창 다시 띄우기 */ }
 ```
 
+광고 ID 는 자리 이름 → ID 묶음 하나로 등록한다. 자리 이름을 안 넘기고 띄우는 기본 광고는 `IndieKitAds.DEFAULT_PLACEMENT` ("default") 키로 등록한다.
+
+**디버그 / 출시 빌드 동작이 다르다.** 디버그 빌드에서 ID 를 안 넘기면 구글 공식 테스트 ID 가 자동으로 들어간다 (개발 중 광고 확인용). 하지만 **출시 빌드에서 운영(release) ID 가 비어 있으면 광고를 아예 안 띄운다** — 테스트 광고를 출시 앱에 노출하면 구글 정책 위반 / AdMob 계정 정지 위험이라 막아 둔다. 즉 출시 전 `release` 값을 꼭 채워야 광고가 보인다.
+
 #### 자리 (placement) — 화면마다 다른 광고 ID 쓰기
 
 같은 종류의 광고를 여러 화면에서 각각 다른 ID 로 분리하고 싶을 때 (예: 배너를 홈 / 상세 / 설정 화면에 따로) 자리 이름을 등록한다. 네 가지 형식 (배너 / 전면 / 리워드 / Native) 모두 지원.
 
 ```kotlin
-// Application.onCreate — 기본 ID 에 더해 자리별 ID 등록:
+// Application.onCreate — 기본 자리 + 자리별 ID 를 한 묶음으로 등록:
 IndieKitAds.configure(
     context = this,
-    bannerAdUnitID = AdUnitID(release = "ca-app-pub-..."),      // 기본 배너 ID
-    bannerAdUnitIDs = mapOf(                                    // 자리별 배너 ID
-        "home"     to AdUnitID(release = "ca-app-pub-...-home"),
-        "settings" to AdUnitID(release = "ca-app-pub-...-settings")
+    bannerAdUnitIDs = mapOf(                                                    // 배너 ID 묶음
+        IndieKitAds.DEFAULT_PLACEMENT to AdUnitID(release = "ca-app-pub-..."),  // 기본 배너
+        "settings"                    to AdUnitID(release = "ca-app-pub-...-settings")
     ),
     interstitialAdUnitIDs = mapOf(
-        "workout_end" to AdUnitID(release = "ca-app-pub-...")
+        IndieKitAds.DEFAULT_PLACEMENT to AdUnitID(release = "ca-app-pub-..."),
+        "workout_end"                 to AdUnitID(release = "ca-app-pub-...")
     )
 )
 
 // Compose 화면 안 — 자리 이름으로 띄움:
-BannerAdView(modifier = Modifier.fillMaxWidth(), placement = "home")
+BannerAdView(modifier = Modifier.fillMaxWidth(), placement = "settings")
 NativeAdView(modifier = Modifier.fillMaxWidth(), placement = "feed")
 
 // 전면 / 리워드도 자리 이름으로:
@@ -140,7 +152,7 @@ IndieKitAds.showInterstitial(activity, placement = "workout_end") { /* 닫힘 �
 IndieKitAds.showRewarded(activity, placement = "hint") { reward -> /* ... */ }
 ```
 
-규칙: 자리 이름을 생략하면 기본 ID. 등록 안 된 자리 이름을 넘기면 경고 로그 후 기본 ID 로 대체 (크래시 없음). 전면 / 리워드는 configure 때 기본 자리 + 등록한 모든 자리를 각각 미리 적재한다. 통계 이벤트엔 `placement` 칸이 같이 실려 Firebase 보고서에서 자리별로 분리해 볼 수 있다.
+규칙: 자리 이름을 생략하면 기본 자리 (`DEFAULT_PLACEMENT`) ID. 등록 안 된 자리 이름을 넘기면 경고 로그 후 기본 자리 ID 로 대체 (크래시 없음). 전면 / 리워드는 configure 때 등록한 모든 자리를 각각 미리 적재한다. 통계 이벤트엔 `placement` 칸이 같이 실려 Firebase 보고서에서 자리별로 분리해 볼 수 있다.
 
 `AndroidManifest.xml` 의 `com.google.android.gms.ads.APPLICATION_ID` meta-data 는 라이브러리가 Google 공식 테스트 app id 로 자동 채워 둠. 출시 직전 사용처 앱이 자기 매니페스트의 같은 키를 `tools:replace="android:value"` 로 실제 app id 로 덮어쓴다.
 
@@ -208,7 +220,7 @@ export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
 
 | 버전 | 날짜 | 무엇을 했나 |
 |---|---|---|
-| `v0.6.0` | 2026-06-12 | `indie-kit-ads` — 자리 (placement) 별 광고 ID 지원. 같은 종류의 광고를 화면마다 다른 ID 로 분리 (configure 의 `*AdUnitIDs` 묶음 + `placement` 매개변수). 기존 호출 코드는 그대로 동작. iOS 자매와 같은 API 모양. 데모 앱 검증 대기. |
+| `v0.6.0` | 2026-06-12 | `indie-kit-ads` — 자리 (placement) 별 광고 ID 지원. 같은 종류의 광고를 화면마다 다른 ID 로 분리 (configure 의 `*AdUnitIDs` 묶음 + `placement` 매개변수). 기존 호출 코드는 그대로 동작. iOS 자매와 같은 API 모양. 데모 앱 검증 완료 (에뮬레이터 — 자리 배너 / 미등록 자리 기본 ID 대체 / 자리별 전면 / 리워드 보상까지 동작 확인). |
 | **`v0.2.7`** | 2026-05-12 | **2단계 IndieKitAds 실기기 검증 완료** — AdMob native ad validator "No implementation issues found" 통과. 라이브러리 기본 UI 에 TouchCart 출처 측정 패턴 3가지 (`IntrinsicSize.Min` / `mediaContent` null 체크 + `sizeIn(maxHeight = 120.dp)` / `NativeAdOptions.ADCHOICES_TOP_RIGHT`) 흡수. `NativeAdView.kt` 는 [Google 공식 compose_utils/NativeAdView.kt](https://github.com/googleads/googleads-mobile-android-examples/blob/main/kotlin/advanced/JetpackComposeDemo/app/src/main/java/com/google/android/gms/example/jetpackcomposedemo/formats/compose_utils/NativeAdView.kt) 와 한 글자 안 다른 상태로 유지, 라이브러리 추가물은 같은 패키지의 `IndieKitNativeAd.kt` 로 분리. 빌드 도구 AGP 9.1.1 / Gradle 9.3.1 통일. (v0.2.1 ~ v0.2.6 은 같은 풍선 풀려고 시도한 hotfix 6번, 모두 빗나감 — 검증 통과 패턴이 측정 쪽에 있다는 단서를 한 번에 잡지 못한 결과.) |
 | `v0.2.0` | 2026-05-11 | 2단계 IndieKitAds 라이브러리 완성. AdMob 4종 광고 (배너 / 전면 / 리워드 / Native — Native 는 안드로이드 선행) + 유럽 광고 동의창 (UMP) + Compose 진입점 (`BannerAdView`, `NativeAdView`) + AnalyticsBus 자동 연결. |
 | `v0.1.0` | 2026-05-11 | 1단계 IndieKitAnalytics — Firebase Analytics 한 줄 추상화 (`logScreen` / `log` / `logLogin` / `logSignUp` / `logPurchase` / `setUserId` / `setUserProperty`). AnalyticsBus 등록 통로 마련. |

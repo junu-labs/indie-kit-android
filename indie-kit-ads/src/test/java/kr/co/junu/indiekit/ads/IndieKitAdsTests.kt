@@ -58,20 +58,19 @@ class IndieKitAdsTests {
         assertEquals("테스트 ID 4종이 모두 달라야 함", 4, unique.size)
     }
 
-    /** AdUnitID 의 빈 인스턴스 — 두 자리 모두 null. */
+    /** AdUnitID 의 빈 인스턴스 — release 가 null. */
     @Test
-    fun `default AdUnitID has null debug and release`() {
+    fun `default AdUnitID has null release`() {
         val empty = AdUnitID()
-        assertEquals(null, empty.debug)
         assertEquals(null, empty.release)
     }
 
     /** AdUnitID data class 동등성. */
     @Test
     fun `AdUnitID equality holds for same values`() {
-        val a = AdUnitID(debug = "ca-app-pub-test", release = "ca-app-pub-real")
-        val b = AdUnitID(debug = "ca-app-pub-test", release = "ca-app-pub-real")
-        val c = AdUnitID(debug = "ca-app-pub-test", release = null)
+        val a = AdUnitID(release = "ca-app-pub-real")
+        val b = AdUnitID(release = "ca-app-pub-real")
+        val c = AdUnitID(release = null)
 
         assertEquals(a, b)
         assertNotEquals(a, c)
@@ -103,24 +102,32 @@ class IndieKitAdsTests {
         assertFalse(IndieKitAds.isRewardedReady)
     }
 
-    /** 자리 (placement) 선택 규칙 — null 은 기본 ID, 등록된 자리는 그 자리 ID, 모르는 자리는 기본 ID 로 대체. */
+    /**
+     * 자리 (placement) 선택 규칙 — null 은 기본 자리(DEFAULT_PLACEMENT) ID, 등록된 자리는 그 자리 ID,
+     * 모르는 자리는 기본 자리 ID 로 대체. 기본 자리도 없으면 빈 AdUnitID.
+     */
     @Test
     fun `selectAdUnitID picks by placement`() {
-        val defaultID = AdUnitID(debug = "ca-app-pub-default")
-        val homeID = AdUnitID(debug = "ca-app-pub-home")
-        val placements = mapOf("home" to homeID)
+        val defaultID = AdUnitID(release = "ca-app-pub-default")
+        val homeID = AdUnitID(release = "ca-app-pub-home")
+        val placements = mapOf(IndieKitAds.DEFAULT_PLACEMENT to defaultID, "home" to homeID)
 
         assertEquals(
             defaultID,
-            IndieKitAds.selectAdUnitID(placements, defaultID, placement = null, format = "배너")
+            IndieKitAds.selectAdUnitID(placements, placement = null, format = "배너")
         )
         assertEquals(
             homeID,
-            IndieKitAds.selectAdUnitID(placements, defaultID, placement = "home", format = "배너")
+            IndieKitAds.selectAdUnitID(placements, placement = "home", format = "배너")
         )
         assertEquals(
             defaultID,
-            IndieKitAds.selectAdUnitID(placements, defaultID, placement = "unknown", format = "배너")
+            IndieKitAds.selectAdUnitID(placements, placement = "unknown", format = "배너")
+        )
+        // 기본 자리조차 등록 안 됨 → 빈 AdUnitID.
+        assertEquals(
+            AdUnitID(),
+            IndieKitAds.selectAdUnitID(mapOf("home" to homeID), placement = null, format = "배너")
         )
     }
 

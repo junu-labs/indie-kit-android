@@ -4,6 +4,25 @@
 
 자매 저장소: [`indie-kit-ios`](https://github.com/junu-labs/indie-kit-ios). iOS 와 단계 번호가 1:1 대칭이며, 같은 단계라도 데모 검증 시점이 다르면 태그 번호가 어긋날 수 있다.
 
+## [0.7.0] - 2026-06-25
+
+### 바뀜 (IndieKitAds — 광고 ID 설정 정리. 기존 호출 코드 수정 필요)
+
+- `configure` 의 단일 ID 매개변수 (`bannerAdUnitID` / `interstitialAdUnitID` / `rewardedAdUnitID` / `nativeAdUnitID`) 를 없앴다. 이제 자리 이름 → ID 묶음 (`bannerAdUnitIDs` 등) 한 가지로만 등록한다. 같은 "배너 ID" 가 두 군데로 갈라져 헷갈리던 문제를 없앤다. iOS 자매와 같은 API 모양 (짝 맞추기).
+  - 자리 이름을 안 넘기고 띄우는 기본 광고는 새 상수 `IndieKitAds.DEFAULT_PLACEMENT` ("default") 키로 등록한다.
+  - 호출 코드 바꾸는 법: `bannerAdUnitID = AdUnitID(release = "...")` → `bannerAdUnitIDs = mapOf(IndieKitAds.DEFAULT_PLACEMENT to AdUnitID(release = "..."))`.
+  - `BannerAdView()` / `showInterstitial(activity)` 등 자리 이름 없이 띄우는 코드는 그대로 — 내부에서 기본 자리를 찾는다.
+- `AdUnitID` 에서 `debug` 자리를 없앴다. 디버그 빌드용 테스트 ID 는 라이브러리가 항상 알아서 채우므로 앱이 설정할 이유가 없었다. 이제 `AdUnitID(release = ...)` 출시 ID 하나만 받는다. (디버그 빌드는 release 값과 무관하게 항상 구글 테스트 ID.)
+
+### 고침 (IndieKitAds — 출시 빌드에서 테스트 광고 노출 차단)
+
+- 출시 빌드인데 운영(release) 광고 ID 가 비어 있으면, 이전엔 경고 로그만 남기고 **구글 테스트 광고를 그대로 띄웠다** (구글 정책 위반 / AdMob 계정 정지 / 스토어 심사 위험). 이제 이 경우 광고를 아예 표시하지 않는다 (`AdUnitID.resolve` 가 `String?` 를 돌려주고 release 빈 값이면 null → 배너 / 전면 / 리워드 / Native 모두 미표시).
+- 디버그 빌드 동작은 그대로 — ID 가 비면 구글 테스트 ID 로 떨어져 개발 중 광고를 확인할 수 있다.
+
+### 검증
+
+- `testDebugUnitTest` 통과. `selectAdUnitID` 자리 선택 규칙 테스트를 새 시그니처 (기본 자리 키 / 기본 자리 미등록 시 빈 AdUnitID) 로 갱신.
+
 ## [0.6.0] - 2026-06-12
 
 ### 추가 (IndieKitAds — 자리 (placement) 별 광고 ID)
@@ -17,7 +36,8 @@
 
 ### 검증
 
-- 단위 테스트 2개 추가 — 자리 선택 규칙 (기본 / 등록된 자리 / 모르는 자리), configure 전 자리별 적재 상태 false. `testDebugUnitTest` 통과. 실 광고 노출은 데모 앱 검증 대기.
+- 단위 테스트 2개 추가 — 자리 선택 규칙 (기본 / 등록된 자리 / 모르는 자리), configure 전 자리별 적재 상태 false. `testDebugUnitTest` 통과.
+- 데모 앱 검증 완료 (2026-06-12, 에뮬레이터 Medium Phone API 36) — 기본 배너 / 자리 "home" 배너 / 미등록 자리 "no_such_place" 의 기본 ID 대체 (logcat 경고 확인) / 자리별 전면 ("workout_end") / 자리별 리워드 ("hint", 보상 콜백까지) / 네이티브 (자리 "feed", AdMob 네이티브 광고 검사기 "No implementation issues found") 모두 테스트 광고 정상 노출. JitPack 출시본 v0.6.0 좌표로 데모 빌드.
 
 ## [0.5.1] - 2026-06-05
 

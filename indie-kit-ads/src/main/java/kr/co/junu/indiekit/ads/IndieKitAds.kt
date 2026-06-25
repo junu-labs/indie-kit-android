@@ -11,7 +11,7 @@
  *  - 자리 (placement): 같은 종류의 광고를 화면마다 다른 ID 로 분리하고 싶을 때 사용.
  *    예: 배너를 홈 / 상세 / 설정 화면에 각각 다른 ID 로. configure 의 `bannerAdUnitIDs` 에
  *    자리 이름 → ID 묶음으로 등록하고, 띄울 때 `BannerAdView(placement = "home")` 처럼 자리 이름을 넘긴다.
- *    자리 이름을 안 넘기면 기본 ID (`bannerAdUnitID`) 사용 — 기존 호출 코드 그대로 동작.
+ *    자리 이름을 안 넘기면 기본 자리 (`IndieKitAds.DEFAULT_PLACEMENT` = "default") 의 ID 를 쓴다.
  *  - Pro 사용자 광고 숨김은 앱이 분기. 라이브러리는 결제 상태를 모른다.
  *  - 통계 자동 연결: 광고 표시 / 클릭 이벤트는 약한 연결 통로 (`AnalyticsBus`) 로 흘려보냄.
  *    통계 모듈을 깐 앱이면 자동으로 Firebase Analytics 에 들어감.
@@ -24,17 +24,16 @@
  *  // 화면마다 다른 배너 ID 를 쓰고 싶으면 자리 (placement) 등록:
  *  IndieKitAds.configure(
  *      context = this,
- *      bannerAdUnitID = AdUnitID(release = "ca-app-pub-..."),          // 기본 배너 ID
- *      bannerAdUnitIDs = mapOf(                                        // 자리별 배너 ID (선택)
- *          "home"     to AdUnitID(release = "ca-app-pub-...-home"),
- *          "settings" to AdUnitID(release = "ca-app-pub-...-settings")
+ *      bannerAdUnitIDs = mapOf(                                                    // 배너 ID 묶음
+ *          IndieKitAds.DEFAULT_PLACEMENT to AdUnitID(release = "ca-app-pub-..."),  // 기본 배너
+ *          "settings"                    to AdUnitID(release = "ca-app-pub-...-settings")
  *      )
  *  )
  *
  *  // 화면 안에서 (Compose):
  *  if (!subscription.isPro) {
- *      BannerAdView(modifier = Modifier.fillMaxWidth())                      // 기본 자리
- *      BannerAdView(modifier = Modifier.fillMaxWidth(), placement = "home")  // "home" 자리 ID 사용
+ *      BannerAdView(modifier = Modifier.fillMaxWidth())                          // 기본 자리 (DEFAULT_PLACEMENT)
+ *      BannerAdView(modifier = Modifier.fillMaxWidth(), placement = "settings")  // "settings" 자리 ID 사용
  *      NativeAdView(modifier = Modifier.fillMaxWidth())
  *  }
  *
@@ -74,6 +73,15 @@ public object IndieKitAds {
     /** 단계 2 진입 표식 — placeholder 가 실 구현으로 교체되었음. */
     public const val isPlaceholder: Boolean = false
 
+    /**
+     * 자리 이름을 안 넘기고 광고를 띄울 때 (`BannerAdView()` 등) 찾는 기본 자리 이름.
+     * configure 의 `bannerAdUnitIDs` 등에 이 이름으로 ID 를 등록해 두면 기본 광고가 된다.
+     * 예: `mapOf(IndieKitAds.DEFAULT_PLACEMENT to AdUnitID(release = "..."), "settings" to AdUnitID(release = "..."))`
+     *
+     * iOS 자매 (`IndieKitAds.defaultPlacement`) 와 같은 값 ("default").
+     */
+    public const val DEFAULT_PLACEMENT: String = "default"
+
     @Volatile
     private var initializedFlag: Boolean = false
     private val configureLock = ReentrantLock()
@@ -82,12 +90,7 @@ public object IndieKitAds {
     @Volatile
     private var appContext: Context? = null
 
-    // 광고 종류마다 기본 ID 한 쌍 + 자리별 ID 묶음 두 칸.
-    private var bannerAdUnitID: AdUnitID = AdUnitID()
-    private var interstitialAdUnitID: AdUnitID = AdUnitID()
-    private var rewardedAdUnitID: AdUnitID = AdUnitID()
-    private var nativeAdUnitID: AdUnitID = AdUnitID()
-
+    // 광고 종류마다 자리 이름 → ID 묶음 한 칸. 자리 이름을 안 넘긴 경우는 DEFAULT_PLACEMENT 키로 찾는다.
     private var bannerAdUnitIDs: Map<String, AdUnitID> = emptyMap()
     private var interstitialAdUnitIDs: Map<String, AdUnitID> = emptyMap()
     private var rewardedAdUnitIDs: Map<String, AdUnitID> = emptyMap()
@@ -121,18 +124,15 @@ public object IndieKitAds {
      * 광고 모듈을 처음 설정한다.
      *
      * 동작
-     *  1. 광고 ID 보관 (debug / release 분리 그대로, 기본 + 자리별 묶음).
+     *  1. 광고 ID 보관 (자리 이름 → 출시 ID 묶음).
      *  2. MobileAds.initialize 호출 (AdMob SDK 시작).
      *  3. 전면 / 리워드 광고 미리 적재 (preload) — 기본 자리 + 등록한 모든 자리.
      *  4. `requestConsent` 가 true 이면 UMP 동의창 흐름 시작 (EEA 사용자에 한해 동의창 노출).
      *
      * @param context Application context. (Application 클래스의 this 를 권장 — Activity 는 onDestroy 시 누수 위험.)
-     * @param bannerAdUnitID 배너 광고 기본 ID 한 쌍. 미주입 시 테스트 ID.
-     * @param interstitialAdUnitID 전면 광고 기본 ID 한 쌍. 미주입 시 테스트 ID.
-     * @param rewardedAdUnitID 리워드 광고 기본 ID 한 쌍. 미주입 시 테스트 ID.
-     * @param nativeAdUnitID Native 광고 기본 ID 한 쌍. 미주입 시 테스트 ID.
-     * @param bannerAdUnitIDs 자리 이름 → 배너 광고 ID 묶음. 화면마다 다른 배너 ID 를 쓸 때.
-     *                        예: `mapOf("home" to AdUnitID(release = "..."), "settings" to AdUnitID(release = "..."))`
+     * @param bannerAdUnitIDs 자리 이름 → 배너 광고 ID 묶음. 자리 이름을 안 넘기는 기본 배너는
+     *                        `IndieKitAds.DEFAULT_PLACEMENT` ("default") 키로 등록한다.
+     *                        예: `mapOf(IndieKitAds.DEFAULT_PLACEMENT to AdUnitID(release = "..."), "settings" to AdUnitID(release = "..."))`
      * @param interstitialAdUnitIDs 자리 이름 → 전면 광고 ID 묶음.
      * @param rewardedAdUnitIDs 자리 이름 → 리워드 광고 ID 묶음.
      * @param nativeAdUnitIDs 자리 이름 → Native 광고 ID 묶음.
@@ -141,10 +141,6 @@ public object IndieKitAds {
      */
     public fun configure(
         context: Context,
-        bannerAdUnitID: AdUnitID = AdUnitID(),
-        interstitialAdUnitID: AdUnitID = AdUnitID(),
-        rewardedAdUnitID: AdUnitID = AdUnitID(),
-        nativeAdUnitID: AdUnitID = AdUnitID(),
         bannerAdUnitIDs: Map<String, AdUnitID> = emptyMap(),
         interstitialAdUnitIDs: Map<String, AdUnitID> = emptyMap(),
         rewardedAdUnitIDs: Map<String, AdUnitID> = emptyMap(),
@@ -154,10 +150,6 @@ public object IndieKitAds {
         configureLock.lock()
         val alreadyConfigured = initializedFlag
         appContext = context.applicationContext
-        this.bannerAdUnitID = bannerAdUnitID
-        this.interstitialAdUnitID = interstitialAdUnitID
-        this.rewardedAdUnitID = rewardedAdUnitID
-        this.nativeAdUnitID = nativeAdUnitID
         this.bannerAdUnitIDs = bannerAdUnitIDs
         this.interstitialAdUnitIDs = interstitialAdUnitIDs
         this.rewardedAdUnitIDs = rewardedAdUnitIDs
@@ -278,49 +270,52 @@ public object IndieKitAds {
     // ────────────────────────────────────────────────────────────────────────
 
     /**
-     * 배너 광고 ID (해석된 값 — 절대 null 아님).
+     * 배너 광고 ID (해석된 값). null 이면 광고 미표시.
      *
-     * @param placement configure 의 `bannerAdUnitIDs` 에 등록한 자리 이름. null 이면 기본 ID.
+     * @param placement configure 의 `bannerAdUnitIDs` 에 등록한 자리 이름. null 이면 기본 자리.
      */
-    public fun resolvedBannerAdUnitID(context: Context, placement: String? = null): String =
-        selectAdUnitID(bannerAdUnitIDs, bannerAdUnitID, placement, "배너")
+    public fun resolvedBannerAdUnitID(context: Context, placement: String? = null): String? =
+        selectAdUnitID(bannerAdUnitIDs, placement, "배너")
             .resolve(context, AdMobTestUnitID.BANNER)
 
-    /** 전면 광고 ID. */
-    public fun resolvedInterstitialAdUnitID(context: Context, placement: String? = null): String =
-        selectAdUnitID(interstitialAdUnitIDs, interstitialAdUnitID, placement, "전면")
+    /** 전면 광고 ID. null 이면 광고 미표시. */
+    public fun resolvedInterstitialAdUnitID(context: Context, placement: String? = null): String? =
+        selectAdUnitID(interstitialAdUnitIDs, placement, "전면")
             .resolve(context, AdMobTestUnitID.INTERSTITIAL)
 
-    /** 리워드 광고 ID. */
-    public fun resolvedRewardedAdUnitID(context: Context, placement: String? = null): String =
-        selectAdUnitID(rewardedAdUnitIDs, rewardedAdUnitID, placement, "리워드")
+    /** 리워드 광고 ID. null 이면 광고 미표시. */
+    public fun resolvedRewardedAdUnitID(context: Context, placement: String? = null): String? =
+        selectAdUnitID(rewardedAdUnitIDs, placement, "리워드")
             .resolve(context, AdMobTestUnitID.REWARDED)
 
-    /** Native 광고 ID. */
-    public fun resolvedNativeAdUnitID(context: Context, placement: String? = null): String =
-        selectAdUnitID(nativeAdUnitIDs, nativeAdUnitID, placement, "Native")
+    /** Native 광고 ID. null 이면 광고 미표시. */
+    public fun resolvedNativeAdUnitID(context: Context, placement: String? = null): String? =
+        selectAdUnitID(nativeAdUnitIDs, placement, "Native")
             .resolve(context, AdMobTestUnitID.NATIVE)
 
     /**
      * 자리 이름으로 광고 ID 한 쌍을 고른다.
      *
      * 규칙
-     *  - 자리 이름이 null → 기본 ID.
+     *  - 자리 이름이 null → DEFAULT_PLACEMENT 키의 ID (기본 자리).
      *  - 자리 이름이 등록되어 있음 → 그 자리의 ID.
-     *  - 자리 이름이 등록 안 됨 → 경고 로그 후 기본 ID (크래시 없음 — 인디 앱 특성상 관대하게).
+     *  - 자리 이름이 등록 안 됨 → 경고 로그 후 기본 자리 ID 로 대체 (크래시 없음 — 인디 앱 특성상 관대하게).
+     *  - 그래도 없으면 빈 AdUnitID — resolve 단계에서 null (미표시) 로 떨어진다.
      *
      * internal — 단위 검증에서 직접 호출.
      */
     internal fun selectAdUnitID(
         placements: Map<String, AdUnitID>,
-        defaultID: AdUnitID,
         placement: String?,
         format: String
     ): AdUnitID {
-        if (placement == null) return defaultID
-        placements[placement]?.let { return it }
-        IKLogger.ads.warning("등록 안 된 $format 광고 자리 '$placement' — 기본 ID 로 대체합니다.")
-        return defaultID
+        val key = placement ?: DEFAULT_PLACEMENT
+        placements[key]?.let { return it }
+        if (placement != null) {
+            IKLogger.ads.warning("등록 안 된 $format 광고 자리 '$placement' — 기본 자리로 대체합니다.")
+            placements[DEFAULT_PLACEMENT]?.let { return it }
+        }
+        return AdUnitID()
     }
 
     // ────────────────────────────────────────────────────────────────────────

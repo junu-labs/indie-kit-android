@@ -2,26 +2,30 @@
  * AdUnitID.kt — IndieKitAds
  *
  * 역할
- *  - 광고 ID 한 쌍 (debug / release) 을 받아 빌드 환경에 맞는 값을 골라 주는 작은 그릇.
- *  - 미주입 시 Google 공식 테스트 ID 자동 적용 — 개발 초기 / SDK 동작 확인용.
+ *  - 출시용 광고 ID (release) 한 개를 받아 빌드 환경에 맞는 값을 골라 주는 작은 그릇.
+ *  - 디버그 빌드에선 release 와 무관하게 Google 공식 테스트 ID 자동 적용 — 개발 초기 / SDK 동작 확인용.
  *
  * 주요 개념
  *  - 출시 직전 앱이 발급받은 실제 ID 를 `release` 자리에 한 번만 채워 주면 끝.
  *  - 빌드 분기는 라이브러리가 대신 한다 — SolTi 의 옛 패턴 (앱 안에서 상수 분기) 을 라이브러리로 흡수.
  *  - 빌드 환경 판별: ApplicationInfo.FLAG_DEBUGGABLE (사용처의 BuildConfig.DEBUG 직접 참조하면 모듈 의존성 충돌이라 회피).
+ *  - 디버그 빌드: release 값과 무관하게 항상 Google 테스트 ID (개발 중 광고 확인용).
+ *  - 출시 빌드: release 가 비면 광고를 아예 안 띄운다 (null 반환). 테스트 광고를 출시 앱에 노출하면
+ *    구글 정책 위반 / AdMob 계정 정지 위험이라, 보이게 두지 않고 막는다.
  *
  * 사용 방법
  *  ```kotlin
  *  IndieKitAds.configure(
  *      context = this,
- *      bannerAdUnitID       = AdUnitID(release = "ca-app-pub-..."),
- *      interstitialAdUnitID = AdUnitID(),                          // 둘 다 비우면 테스트 ID 사용
- *      rewardedAdUnitID     = AdUnitID(debug = "ca-app-pub-개별테스트", release = "ca-app-pub-출시")
+ *      bannerAdUnitIDs = mapOf(
+ *          IndieKitAds.DEFAULT_PLACEMENT to AdUnitID(release = "ca-app-pub-..."),
+ *          "settings"                    to AdUnitID(release = "ca-app-pub-...-settings")
+ *      )
  *  )
  *  ```
  *
  * 주의사항
- *  - 구글 정책: 출시 앱에서 테스트 ID 사용 금지. 정책 위반이지만 자동 차단은 하지 않음 (인디 앱 특성상 너무 가혹).
+ *  - 구글 정책: 출시 앱에서 테스트 ID 사용 금지. 출시 빌드에서 release 가 비면 광고를 표시하지 않아 정책 위반을 막는다.
  *  - iOS 자매 (`AdUnitID` struct) 와 같은 매개변수 이름 / 결과 동작.
  */
 
@@ -32,35 +36,38 @@ import android.content.pm.ApplicationInfo
 import kr.co.junu.indiekit.core.IKLogger
 
 /**
- * 광고 ID 한 쌍.
+ * 출시용 광고 ID 한 개를 담는 작은 그릇.
  *
- * 두 자리 모두 nullable — 미주입 시 Google 공식 테스트 ID 자동 적용.
+ * 디버그 빌드에선 이 값과 무관하게 Google 공식 테스트 ID 가 쓰인다 (라이브러리가 알아서 채움).
+ * 그래서 앱은 출시 ID 하나만 신경 쓰면 된다.
  *
- * @property debug 디버그 빌드에서 쓸 광고 ID. null 이면 Google 공식 테스트 ID 사용.
- * @property release 출시 빌드에서 쓸 광고 ID. null 이면 Google 공식 테스트 ID 사용 (정책 위반 — 출시 전 채워야 함).
+ * @property release 출시 빌드에서 쓸 광고 ID. null 이면 출시 빌드에서 광고를 띄우지 않는다 (출시 전 채워야 함).
  */
 public data class AdUnitID(
-    public val debug: String? = null,
     public val release: String? = null
 ) {
     /**
      * 현재 빌드 환경에 맞는 광고 ID 를 돌려준다.
      *
+     * 동작
+     *  - 디버그 빌드: release 값과 무관하게 항상 Google 테스트 ID. 개발 중 실광고 노출은 구글 정책상 무효 트래픽이라 막는다.
+     *  - 출시 빌드: release 값. 비어 있으면 null — 테스트 광고를 출시 앱에 노출하지 않기 위함 (구글 정책 위반 / 계정 정지 방지).
+     *
      * @param context 빌드 환경 (debuggable) 판별용. configure 에서 받은 application context.
-     * @param testFallback 디버그 / 출시 자리가 모두 비었을 때 쓸 Google 테스트 ID.
-     * @return 사용할 광고 ID (절대 null 아님).
+     * @param testFallback 디버그 빌드에서 쓸 Google 테스트 ID.
+     * @return 사용할 광고 ID. 출시 빌드인데 release 가 비어 있으면 null — 이 경우 광고를 띄우지 않는다.
      */
-    public fun resolve(context: Context, testFallback: String): String {
+    public fun resolve(context: Context, testFallback: String): String? {
         val isDebug = (context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
         return if (isDebug) {
-            debug ?: testFallback
+            testFallback
         } else {
             release ?: run {
-                // 출시 빌드인데 release 가 비어 있음 — 정책 위반 가능. Logcat 으로 강한 경고만 남기고 테스트 ID 사용.
+                // 출시 빌드인데 release 가 비어 있음 — 테스트 광고를 띄우면 구글 정책 위반이라 광고를 아예 표시하지 않는다.
                 IKLogger.ads.error(
-                    "출시 빌드인데 release 광고 ID 가 비어 있습니다. 구글 정책 위반입니다 — 출시 전 채워 주세요."
+                    "출시 빌드인데 release 광고 ID 가 비어 있습니다 — 광고를 표시하지 않습니다. 출시 전 채워 주세요."
                 )
-                testFallback
+                null
             }
         }
     }
