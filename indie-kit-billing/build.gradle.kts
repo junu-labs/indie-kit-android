@@ -1,6 +1,6 @@
 // 역할
 //  - kr.co.junu.indiekit.billing 패키지의 안드로이드 라이브러리.
-//  - 4단계 — Google Play Billing v8 래퍼 + 자동 갱신 구독 + 비소진형 1회성 결제 + 자동 acknowledge.
+//  - 4단계 — Google Play Billing v7 (7.1.1) 래퍼 + 자동 갱신 구독 + 비소진형 1회성 결제 + 자동 acknowledge.
 //
 // 외부 의존성
 //  - play-billing-ktx (api): BillingClient / ProductDetails / Purchase 자체가 사용처에 노출되는 형이라 api.

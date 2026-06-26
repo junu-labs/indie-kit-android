@@ -26,8 +26,8 @@ iOS 자매 라이브러리 (`indie-kit-ios`) 와 같은 5개 모듈을 같은 �
 implementation("com.github.junu-labs.indie-kit-android:indie-kit-analytics:vX.Y.Z")  → Firebase Analytics
 implementation("com.github.junu-labs.indie-kit-android:indie-kit-ads:vX.Y.Z")        → Google Mobile Ads + 광고 동의창
 implementation("com.github.junu-labs.indie-kit-android:indie-kit-network:vX.Y.Z")    → OkHttp 위 얇은 호출 묶음 + 인증값 자동 갱신
-implementation("com.github.junu-labs.indie-kit-android:indie-kit-billing:vX.Y.Z")    → Play Billing v8 (구독 + 비소진형)
-implementation("com.github.junu-labs.indie-kit-android:indie-kit-auth:vX.Y.Z")       → 카카오 / 구글 / 애플 + 우리 서버 세션 발급
+implementation("com.github.junu-labs.indie-kit-android:indie-kit-billing:vX.Y.Z")    → Play Billing v7 (구독 + 비소진형)
+implementation("com.github.junu-labs.indie-kit-android:indie-kit-auth:vX.Y.Z")       → 카카오 / 구글 + 우리 서버 세션 발급
 ```
 
 추가로 외부엔 안 보이는 내부 묶음 `indie-kit-core` 1개. 5개 모듈이 같이 쓰는 로깅 / 에러 / 약한 연결 통로가 들어간다 (`api(project(":indie-kit-core"))` 로 자동 노출).
@@ -52,7 +52,7 @@ implementation("com.github.junu-labs.indie-kit-android:indie-kit-auth:vX.Y.Z")  
 | 첫 시작 지점 | 0단계 부트스트랩부터 | Gradle 멀티 모듈 골격 + Placeholder + CI 먼저. 실제 모듈 코드는 1단계부터 한 모듈씩. |
 | 의존성 주입 (DI) | 안 씀 (object 싱글톤) | iOS 의 `IndieKitAds.shared` / `IndieKitAuth.shared` 와 같은 패턴. Hilt 를 강제하지 않아 사용처가 자유. Hilt 쓰는 앱은 `@Provides` 한 줄로 감싼다. |
 | 네트워크 범위 | 인증값 자동 갱신까지 | 401 응답이 오면 인증값 자동 재발급 → 같은 요청 한 번 더 시도. 토큰 공급자 + 갱신 람다 두 개를 받는다. (iOS 와 동일) |
-| 로그인 책임 | 우리 서버 세션 발급까지 | 카카오 / 구글 / 애플에서 받은 신원 확인값을 우리 서버로 던져 세션값까지 받아온다. 백엔드 끝점 형식이 앱마다 다른 건 어댑터로 풀어 준다. |
+| 로그인 책임 | 우리 서버 세션 발급까지 | 카카오 / 구글에서 받은 신원 확인값을 우리 서버로 던져 세션값까지 받아온다. 백엔드 끝점 형식이 앱마다 다른 건 어댑터로 풀어 준다. |
 | 모듈 간 자동 연결 | 약하게 자동 연결 | 광고 모듈은 통계 모듈을 직접 모른다. `indie-kit-core` 안의 통로 (`AnalyticsBus`) 만 안다. 통계 모듈을 깐 앱이면 광고 이벤트가 자동으로 통계로 흘러간다. |
 | 1차 배포 경로 | JitPack | `git tag` 한 번이면 `com.github.junu-labs.indie-kit-android:{모듈}:{버전}` 으로 받아 쓸 수 있다. Maven Central 은 1단계 검증 이후 별도 결정. |
 
@@ -122,7 +122,7 @@ net.delete("/items/42")
 
 ### IndieKitBilling (4단계)
 
-해 주는 것: Google Play Billing v8 위에서 자동 갱신 구독, 비소진형 1회성 결제, "평생 사용" 항구 결제를 같은 그릇으로.
+해 주는 것: Google Play Billing v7 위에서 자동 갱신 구독, 비소진형 1회성 결제, "평생 사용" 항구 결제를 같은 그릇으로.
 
 지원 결제 종류 (iOS 와 1:1 대칭):
 - 자동 갱신 구독 (Play Billing `SUBS`) — 월간 / 연간 Pro
@@ -148,16 +148,16 @@ object IndieKitBilling {
 }
 ```
 
-내부는 Google Play Billing v8 wrapper. SolTi 의 `BillingManager.kt` 추출. Google Play 정책상 구매 후 3일 내 `acknowledgePurchase()` 미호출 시 자동 환불 — 라이브러리가 `purchase()` 성공 직후 자동 호출. 앱은 신경 안 써도 됨.
+내부는 Google Play Billing v7 (7.1.1) wrapper. SolTi 의 `BillingManager.kt` 추출. Google Play 정책상 구매 후 3일 내 `acknowledgePurchase()` 미호출 시 자동 환불 — 라이브러리가 `purchase()` 성공 직후 자동 호출. 앱은 신경 안 써도 됨.
 
 ### IndieKitAuth (5단계) — 우리 서버 세션 발급까지
 
-해 주는 것: 애플 / 구글 / 카카오 로그인 → 우리 서버에 신원 확인값 보내 세션값 받아오기.
+해 주는 것: 구글 / 카카오 로그인 → 우리 서버에 신원 확인값 보내 세션값 받아오기.
 
-지원 로그인: 구글 + 애플 + 카카오.
+지원 로그인: 구글 + 카카오. (안드로이드는 Apple 미지원 — iOS 자매에만 Apple 케이스가 있다.)
 
 ```kotlin
-enum class AuthProvider { GOOGLE, APPLE, KAKAO }
+enum class AuthProvider { GOOGLE, KAKAO }
 
 data class AuthUser(
     val id: String,
@@ -172,8 +172,6 @@ object IndieKitAuth {
         context: Context,
         googleServerClientID: String? = null,
         kakaoNativeAppKey: String? = null,
-        appleServiceID: String? = null,        // Apple Developer Console 의 Service ID
-        appleRedirectURI: String? = null,
         backend: SessionExchangeAdapter? = null
     )
     suspend fun signIn(activity: Activity, provider: AuthProvider): AuthUser
@@ -188,7 +186,7 @@ object IndieKitAuth {
 - `AndroidManifest.xml` 에 `<meta-data android:name="com.kakao.sdk.AppKey" .../>` + Kakao Login Activity intent-filter (`kakao{appkey}://oauth`) 추가
 - 카카오 디벨로퍼 콘솔 (https://developers.kakao.com) 에서 앱 등록 + 패키지명 + key hash (디버그 / 릴리즈) 등록 필요
 
-**Apple Sign-In on Android:** 네이티브 SDK 없음 → OAuth 2.0 + Custom Tabs 로 직접 구현. iOS 네이티브 (`ASAuthorizationAppleIDProvider`) 보다 복잡. 5단계 진입 시 라이브러리 선택지 (예: `com.willowtreeapps:signinwithapplebutton-android`) 재조사 필요.
+**Apple 로그인은 안드로이드 미지원.** 실제 구현은 구글 / 카카오 두 가지만 넣었다 (`AuthProvider { GOOGLE, KAKAO }`). 안드로이드엔 Apple 네이티브 SDK 가 없어 OAuth 2.0 + Custom Tabs 를 직접 구현해야 하는데, 들이는 품에 비해 안드로이드 사용자의 Apple 로그인 수요가 낮아 빼기로 결정했다. iOS 자매에는 Apple 케이스가 그대로 있다.
 
 우리 서버 세션을 네트워크 모듈에 자동 연결: `IndieKitNetwork` 의 `tokenProvider` 자리에 `IndieKitAuth.accessToken` 을 넣으면 끝.
 
@@ -303,8 +301,8 @@ object IndieKitAuth {
 | 1 (Analytics) | `firebase-bom` + `firebase-analytics` |
 | 2 (Ads) | `compose-bom` (BannerAdView 가 Compose) + `play-services-ads` + `user-messaging-platform` |
 | 3 (Network) | `okhttp` (또는 `ktor-client-android` — 단계 진입 시 결정) + `kotlinx-serialization-json` |
-| 4 (Billing) | `billing-ktx` (Play Billing v8) |
-| 5 (Auth) | `googleid` (Credential Manager 경로) + `kakao-sdk:v2-user` + Custom Tabs (`androidx.browser:browser`) |
+| 4 (Billing) | `billing-ktx` (Play Billing v7) |
+| 5 (Auth) | `googleid` (Credential Manager 경로) + `kakao-sdk:v2-user` |
 
 각 단계의 의존성은 **그 모듈의 build.gradle.kts 에만** 추가. 다른 모듈은 끌리지 않는다.
 

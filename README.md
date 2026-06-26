@@ -6,17 +6,19 @@
 
 ## 들어 있는 것
 
+**5개 모듈은 한 묶음이고 버전도 하나다.** JitPack 은 저장소 전체를 git 태그 하나로 빌드하므로, 모듈마다 버전이 따로 있지 않다. 어떤 모듈을 받든 **모두 같은 태그 (지금은 `v0.7.1`)** 로 받는다. 아래 "상태" 칸은 버전이 아니라 *검증이 어디까지 됐는가* 다.
+
 | 모듈 | 무엇을 해 주는가 | 단계 | 상태 |
 |---|---|---|---|
-| `indie-kit-analytics` | Firebase Analytics — 화면 이동 / 이벤트 / 사용자 속성 | 1 | `v0.1.0` (라이브러리 완성, SolTi 검증 예정) |
-| `indie-kit-ads` | AdMob 배너 / 전면 / 리워드 / Native + 유럽 광고 동의창 | 2 | **`v0.6.0` (검증 완료 — 실기기 v0.2.7 + 자리 (placement) 별 광고 ID 는 v0.6.0 에뮬레이터)** |
-| `indie-kit-network` | OkHttp 위 얇은 호출 묶음 + 인증값 자동 갱신 | 3 | 라이브러리 미착수 |
-| `indie-kit-billing` | Play Billing v8 — 구독 / 1회성 / 평생 결제 | 4 | 라이브러리 미착수 |
-| `indie-kit-auth` | 카카오 / 구글 / 애플 로그인 + 우리 서버 세션 발급 | 5 | 라이브러리 미착수 |
+| `indie-kit-analytics` | Firebase Analytics — 화면 이동 / 이벤트 / 사용자 속성 | 1 | 라이브러리 완성, SolTi 통합 검증 예정 |
+| `indie-kit-ads` | AdMob 배너 / 전면 / 리워드 / Native + 유럽 광고 동의창 | 2 | **실기기 검증 완료** (자리 (placement) 별 광고 ID 는 에뮬레이터 검증) |
+| `indie-kit-network` | OkHttp 위 얇은 호출 묶음 + 인증값 자동 갱신 | 3 | 라이브러리 완성, 데모 검증 |
+| `indie-kit-billing` | Play Billing v7 — 구독 / 1회성 / 평생 결제 | 4 | 라이브러리 완성, 데모 검증 |
+| `indie-kit-auth` | 카카오 / 구글 로그인 + 우리 서버 세션 발급 | 5 | 라이브러리 완성, 데모 검증 |
 
 자세한 단계는 `PLAN.md`, 모듈별 변경 이력은 `CHANGELOG.md` 참고.
 
-현재는 **2단계 IndieKitAds 출시 + 실기기 검증 완료** (`v0.2.7`). 4종 광고 (배너 / 전면 / 리워드 / Native — Native 는 안드로이드 선행) + 유럽 광고 동의창 (UMP) + AdMob native ad debug validator 단말 통과. 다음은 SolTi 통합 검증 또는 3단계 (Network) 진입.
+현재는 **5개 모듈 모두 작성 완료, 최신 태그 `v0.7.1`**. 광고 (`indie-kit-ads`) 만 실기기 검증까지 끝났고, 나머지 넷은 데모 앱 검증 단계다. 다음은 SolTi 통합 검증.
 
 ## 사용 방법 (1단계 이후 적용)
 
@@ -35,9 +37,11 @@ dependencyResolutionManagement {
 앱 모듈 (`app/build.gradle.kts`) 의 dependencies 에 필요한 모듈만 추가:
 
 ```kotlin
-implementation("com.github.junu-labs.indie-kit-android:indie-kit-analytics:v0.1.0")
-implementation("com.github.junu-labs.indie-kit-android:indie-kit-ads:v0.2.7")
+implementation("com.github.junu-labs.indie-kit-android:indie-kit-analytics:v0.7.1")
+implementation("com.github.junu-labs.indie-kit-android:indie-kit-ads:v0.7.1")
 ```
+
+**여러 모듈을 쓸 땐 버전을 반드시 똑같이 맞춘다** (위처럼 둘 다 `v0.7.1`). 모듈들은 속에서 `indie-kit-core` 를 함께 쓰는데, 버전을 섞으면 (`analytics:v0.1.0` + `ads:v0.7.1` 식) core 가 두 벌 딸려와 충돌할 수 있다.
 
 광고만 필요한 앱은 광고 모듈만 추가 → 나머지 외부 라이브러리 (Firebase, 카카오, 구글, OkHttp, Compose) 가 빌드에 안 끼게 한다.
 
@@ -220,7 +224,13 @@ export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
 
 | 버전 | 날짜 | 무엇을 했나 |
 |---|---|---|
+| `v0.7.1` | 2026-06-25 | 빌드 환경 고침 — `jitpack.yml` 로 빌드 JDK 를 openjdk17 로 고정 (없으면 출시본 빌드가 깨짐). 코드 변경 없음. |
+| `v0.7.0` | 2026-06-25 | `indie-kit-ads` — 광고 ID 설정 정리 (자리 이름 → ID 묶음 한 가지로 통일, iOS 자매와 같은 모양). 출시 빌드에서 운영 ID 가 비면 테스트 광고를 띄우지 않고 아예 미표시 (구글 정책 위반 차단). |
 | `v0.6.0` | 2026-06-12 | `indie-kit-ads` — 자리 (placement) 별 광고 ID 지원. 같은 종류의 광고를 화면마다 다른 ID 로 분리 (configure 의 `*AdUnitIDs` 묶음 + `placement` 매개변수). 기존 호출 코드는 그대로 동작. iOS 자매와 같은 API 모양. 데모 앱 검증 완료 (에뮬레이터 — 자리 배너 / 미등록 자리 기본 ID 대체 / 자리별 전면 / 리워드 보상까지 동작 확인). |
+| `v0.5.1` | 2026-06-05 | `indie-kit-billing` — 구독 만료 정확성. 조용한 재확인 `refresh()` 추가 (포그라운드 복귀만으로 `isPro` 가 정확히 떨어짐). iOS 자매와 1:1. |
+| `v0.5.0-rc1` | 2026-05-20 | 5단계 `indie-kit-auth` — 카카오 / 구글 로그인 + 우리 서버 세션 교환. Credential Manager + kakao-sdk 위 얇은 래퍼. iOS 자매와 1:1 API. 데모로 신원값 수신 검증. |
+| `v0.4.0` | 2026-05-20 | 4단계 `indie-kit-billing` — Play Billing 구독 / 1회성 / 평생 결제. 자동 acknowledge + 보유 권한 새로 고침 + 구독 만료 근사. iOS 자매와 1:1 API. 데모 검증. |
+| `v0.3.0` | 2026-05-19 | 3단계 `indie-kit-network` — OkHttp 위 얇은 호출 묶음 (`get` / `post` / `put` / `delete`) + 인증 헤더 자동 첨부 + 401 자동 갱신. iOS 자매와 1:1 API. 데모 검증. |
 | **`v0.2.7`** | 2026-05-12 | **2단계 IndieKitAds 실기기 검증 완료** — AdMob native ad validator "No implementation issues found" 통과. 라이브러리 기본 UI 에 TouchCart 출처 측정 패턴 3가지 (`IntrinsicSize.Min` / `mediaContent` null 체크 + `sizeIn(maxHeight = 120.dp)` / `NativeAdOptions.ADCHOICES_TOP_RIGHT`) 흡수. `NativeAdView.kt` 는 [Google 공식 compose_utils/NativeAdView.kt](https://github.com/googleads/googleads-mobile-android-examples/blob/main/kotlin/advanced/JetpackComposeDemo/app/src/main/java/com/google/android/gms/example/jetpackcomposedemo/formats/compose_utils/NativeAdView.kt) 와 한 글자 안 다른 상태로 유지, 라이브러리 추가물은 같은 패키지의 `IndieKitNativeAd.kt` 로 분리. 빌드 도구 AGP 9.1.1 / Gradle 9.3.1 통일. (v0.2.1 ~ v0.2.6 은 같은 풍선 풀려고 시도한 hotfix 6번, 모두 빗나감 — 검증 통과 패턴이 측정 쪽에 있다는 단서를 한 번에 잡지 못한 결과.) |
 | `v0.2.0` | 2026-05-11 | 2단계 IndieKitAds 라이브러리 완성. AdMob 4종 광고 (배너 / 전면 / 리워드 / Native — Native 는 안드로이드 선행) + 유럽 광고 동의창 (UMP) + Compose 진입점 (`BannerAdView`, `NativeAdView`) + AnalyticsBus 자동 연결. |
 | `v0.1.0` | 2026-05-11 | 1단계 IndieKitAnalytics — Firebase Analytics 한 줄 추상화 (`logScreen` / `log` / `logLogin` / `logSignUp` / `logPurchase` / `setUserId` / `setUserProperty`). AnalyticsBus 등록 통로 마련. |
