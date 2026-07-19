@@ -56,6 +56,9 @@ public object IKLogger {
     /** 로그인 모듈용 로거 — 제공자별 로그인, 우리 서버 세션 발급. */
     public val auth: Category = Category("auth")
 
+    /** 푸시 모듈용 로거 — 권한, 알림 주소 등록, 수신 / 누름, 예약 알림. */
+    public val push: Category = Category("push")
+
     /** IndieKitCore 자체용 로거 — 약한 연결 통로 등록 등 라이브러리 내부 동작. */
     public val core: Category = Category("core")
 

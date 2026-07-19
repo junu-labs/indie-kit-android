@@ -7,7 +7,7 @@
 > - 3단계 IndieKitNetwork — 라이브러리 본체 + 데모 검증 완료 (`v0.3.0`)
 > - 4단계 IndieKitBilling — 라이브러리 본체 + 데모 검증 완료 (`v0.4.0`)
 > - 5단계 IndieKitAuth — 라이브러리 본체 + 데모 신원값 수신 검증 완료 (`v0.5.0-rc1`) — 서버 세션 발급 검증 대기
-> - 6단계 indie-kit-push — 설계 완료 (2026-07-19, `PUSH_PLAN.md`), 개발 대기
+> - 6단계 indie-kit-push — 라이브러리 본체 완성 (2026-07-19) — 데모 검증 대기. 설계는 `PUSH_PLAN.md`
 >
 > **저장소:** `junu-labs/indie-kit-android` (Gradle 멀티 모듈 + JitPack)
 > **자매 저장소:** `junu-labs/indie-kit-ios` — 같은 단계 / 같은 진입점 이름.

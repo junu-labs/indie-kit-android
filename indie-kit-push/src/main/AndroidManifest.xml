@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  역할
+   - indie-kit-push 의 매니페스트. 사용처 앱의 매니페스트와 자동 merge 된다.
+   - 세 가지를 선언한다:
+     1. 권한 — 인터넷 (기기 등록 올리기), 알림 게시 (Android 13+), 부팅 수신 (예약 알림 복원).
+     2. FCM 수신 서비스 — 알림 주소 갱신 / 도착 알림이 IndieKitPushService 로 들어온다.
+     3. 리시버 둘 — 예약 알림이 울릴 때 (LocalAlarmReceiver), 기기 재부팅 때 복원 (BootReceiver).
+
+  주의사항
+   - 정확한 시각 알람 권한 (SCHEDULE_EXACT_ALARM) 은 여기 선언하지 않는다.
+     스토어 정책 심사 대상이라 분 단위 정확도가 꼭 필요한 앱만 자기 매니페스트에 직접 선언한다
+     (PUSH_PLAN.md 10번 항목 2번).
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+    <application>
+
+        <!-- FCM 수신 서비스 — 알림 주소 갱신 (onNewToken) / 도착 알림 (onMessageReceived) 수신. -->
+        <service
+            android:name="kr.co.junu.indiekit.push.IndieKitPushService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
+        <!-- 예약 알림이 울릴 시각에 AlarmManager 가 깨우는 리시버. -->
+        <receiver
+            android:name="kr.co.junu.indiekit.push.LocalAlarmReceiver"
+            android:exported="false" />
+
+        <!-- 기기 재부팅 때 예약 알림을 다시 걸어 주는 리시버 (AlarmManager 예약은 재부팅에 사라짐). -->
+        <receiver
+            android:name="kr.co.junu.indiekit.push.BootReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
+
+    </application>
+
+</manifest>

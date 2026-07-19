@@ -49,5 +49,6 @@ include(
     ":indie-kit-ads",
     ":indie-kit-network",
     ":indie-kit-billing",
-    ":indie-kit-auth"
+    ":indie-kit-auth",
+    ":indie-kit-push"
 )

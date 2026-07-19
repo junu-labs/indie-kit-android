@@ -50,6 +50,12 @@ androidxCredentials = "1.3.0"
 googleId = "1.1.1"
 kakaoSdk = "2.20.6"
 
+# 6단계 추가 — Push (알림 권한 / FCM 알림 주소 / 수신·누름 / 로컬 예약 알림).
+#  - firebase-messaging: FCM 본체 (알림 주소 발급 + 수신 서비스). 버전은 firebase-bom 이 관리.
+#  - androidx-activity: requestPermission 이 권한 팝업 결과를 받으려면 ComponentActivity 의
+#    activityResultRegistry 가 필요. Compose 앱은 이미 ComponentActivity 기반이라 추가 부담 없음.
+androidxActivity = "1.9.3"
+
 [libraries]
 # 단위 테스트 — 모든 모듈 공용 (모듈마다 PlaceholderTest 또는 실제 테스트에서 사용).
 junit = { group = "junit", name = "junit", version.ref = "junit" }
@@ -95,6 +101,12 @@ androidx-credentials = { group = "androidx.credentials", name = "credentials", v
 androidx-credentials-play-services-auth = { group = "androidx.credentials", name = "credentials-play-services-auth", version.ref = "androidxCredentials" }
 googleid = { group = "com.google.android.libraries.identity.googleid", name = "googleid", version.ref = "googleId" }
 kakao-user = { group = "com.kakao.sdk", name = "v2-user", version.ref = "kakaoSdk" }
+
+# 6단계 IndieKitPush 가 끌어 쓸 FCM / Activity 라이브러리.
+#  - firebase-messaging: 알림 주소 (등록 토큰) 발급 + 수신 서비스. 버전은 firebase-bom.
+#  - androidx-activity: 알림 권한 팝업 (Android 13+) 결과 수신용 ActivityResultRegistry.
+firebase-messaging = { group = "com.google.firebase", name = "firebase-messaging" }
+androidx-activity = { group = "androidx.activity", name = "activity", version.ref = "androidxActivity" }
 
 [plugins]
 android-library = { id = "com.android.library", version.ref = "agp" }
