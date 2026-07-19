@@ -181,3 +181,15 @@ FCM 으로 보낼 때의 실제 모양 — 알림 부분과 데이터 부분을 
 3. **알림 주소는 앱을 지웠다 깔면 바뀐다.** 오래된 주소로 보내면 FCM 이 "등록 안 됨" 오류를 돌려준다 — 서버가 그 주소를 지우는 처리까지 해야 한다 (서버 작업 때 반영).
 4. **에뮬레이터도 서버 푸시를 받을 수 있다** (구글 Play 이미지 + 구글 계정 로그인 상태). iOS 시뮬레이터보다 검증이 쉬우므로 데모 검증 때 실제 발송까지 확인한다.
 5. **서비스 계정 키는 서버에만 둔다.** 모듈 / 앱 / 이 저장소 어디에도 넣지 않는다. 키 보관은 `Docs/keystore/` 규칙을 따른다.
+
+## 11. 데모 앱에 로컬로 붙일 때 (다음 세션용 메모)
+
+데모 앱 (`Apps/IndieKitExample/indieKitDemo_Android/`) 세션에서 할 일. 2026-07-19 조사 결과.
+
+1. 데모의 `settings.gradle.kts` 에 **로컬 연결 (composite build) 블록이 주석으로 준비**되어 있다 (지금은 JitPack 출시본 검증 중이라 꺼 둔 상태). 주석을 풀고, substitute 목록에 한 줄 추가:
+   `substitute(module("kr.co.junu:indie-kit-push")).using(project(":indie-kit-push"))`
+2. 데모 `app/build.gradle.kts` 의 dependencies 에 `implementation("kr.co.junu:indie-kit-push:...")` 추가 (좌표 버전은 데모의 libs.versions.toml 방식 따름 — substitute 가 로컬 모듈로 바꿔치므로 버전 숫자는 형식만 맞으면 됨).
+3. Application.onCreate 에 configure, 시작 Activity 의 onCreate / onNewIntent 에 `IndieKitPush.handleIntent(intent)` (5번 항목 코드 그대로). 서버 끝점은 아직 없으므로 아무 URL 이나 — "등록 실패 → 경고 로그만, 앱 정상" 도 검증 항목.
+4. 푸시 데모 화면: 권한 요청 / 권한 상태 / 예약 알림 등록·취소·목록 / 마지막 onTap 내용 표시.
+5. 서버 푸시 수신: 데모 앱의 Firebase 콘솔 > Messaging > 시험 메시지 (기기 토큰 지정) 로 서버 없이 확인 가능. 토큰은 Logcat (`IndieKit.push`) 만 뒤지지 말고 데모 화면에 표시해 두면 편하다 — FirebaseMessaging.getInstance().token 을 화면에 보여 주는 줄 추가 권장.
+6. 에뮬레이터는 구글 Play 이미지 + 구글 계정 로그인 상태여야 FCM 수신이 된다.
