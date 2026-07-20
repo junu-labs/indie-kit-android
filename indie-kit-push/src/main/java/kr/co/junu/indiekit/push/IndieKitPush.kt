@@ -40,6 +40,7 @@ package kr.co.junu.indiekit.push
 import android.Manifest
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Handler
@@ -128,7 +129,10 @@ public object IndieKitPush {
         // FCM 알림 주소 확보 — 권한과 무관하게 발급된다 (권한은 "띄우기" 에만 필요).
         try {
             FirebaseMessaging.getInstance().token
-                .addOnSuccessListener { token -> newRegistrar.updateToken(token) }
+                .addOnSuccessListener { token ->
+                    logTokenIfDebuggable(app, token)
+                    newRegistrar.updateToken(token)
+                }
                 .addOnFailureListener { error ->
                     IKLogger.push.warning("FCM 알림 주소 발급 실패: ${error.message} — 다음 앱 시작 때 재시도")
                 }
@@ -274,6 +278,7 @@ public object IndieKitPush {
 
     /** 예약 알림 갱신 열쇠 — FCM 서비스가 새 알림 주소를 받았을 때 (configure 전일 수도 있다). */
     internal fun internalOnNewToken(context: Context, token: String) {
+        logTokenIfDebuggable(context, token)
         val current = registrar
         if (current != null) {
             current.updateToken(token)
@@ -356,6 +361,19 @@ public object IndieKitPush {
     }
 
     // MARK: 내부 헬퍼
+
+    /**
+     * 앱이 디버그 빌드 (debuggable) 일 때만 토큰 원문을 Logcat 에 남긴다 — 서버 등록 대조 시험용.
+     *
+     * 라이브러리 자신의 BuildConfig.DEBUG 는 배포판 (JitPack release) 에서 항상 false 라 못 쓴다.
+     * 대신 "사용하는 앱" 의 debuggable 플래그를 본다 — 앱을 디버그로 빌드했을 때만 찍힌다.
+     */
+    private fun logTokenIfDebuggable(context: Context, token: String) {
+        val debuggable = (context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
+        if (debuggable) {
+            IKLogger.push.debug("알림 주소 값: $token")
+        }
+    }
 
     /** onTap 을 메인 스레드에서 부른다. */
     private fun dispatchTap(payload: PushPayload) {
