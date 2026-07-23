@@ -6,7 +6,7 @@
 
 ## 들어 있는 것
 
-**6개 모듈은 한 묶음이고 버전도 하나다.** JitPack 은 저장소 전체를 git 태그 하나로 빌드하므로, 모듈마다 버전이 따로 있지 않다. 어떤 모듈을 받든 **모두 같은 태그 (지금은 `v0.8.2`)** 로 받는다. 아래 "상태" 칸은 버전이 아니라 *검증이 어디까지 됐는가* 다.
+**6개 모듈은 한 묶음이고 버전도 하나다.** JitPack 은 저장소 전체를 git 태그 하나로 빌드하므로, 모듈마다 버전이 따로 있지 않다. 어떤 모듈을 받든 **모두 같은 태그 (지금은 `v0.9.0`)** 로 받는다. 아래 "상태" 칸은 버전이 아니라 *검증이 어디까지 됐는가* 다.
 
 | 모듈 | 무엇을 해 주는가 | 단계 | 상태 |
 |---|---|---|---|
@@ -19,7 +19,7 @@
 
 자세한 단계는 `PLAN.md`, 모듈별 변경 이력은 `CHANGELOG.md` 참고.
 
-현재는 **6개 모듈 모두 작성 완료, 최신 태그 `v0.8.2`**. 광고 (`indie-kit-ads`) 와 푸시 (`indie-kit-push`) 는 실기기 검증까지 끝났고, 나머지는 데모 앱 검증 단계다. 다음은 SolTi 통합 검증.
+현재는 **6개 모듈 모두 작성 완료, 최신 태그 `v0.9.0`**. 광고 (`indie-kit-ads`) 와 푸시 (`indie-kit-push`) 는 실기기 검증까지 끝났고, 나머지는 데모 앱 검증 단계다. 다음은 SolTi 통합 검증.
 
 ## 사용 방법 (1단계 이후 적용)
 
@@ -38,11 +38,11 @@ dependencyResolutionManagement {
 앱 모듈 (`app/build.gradle.kts`) 의 dependencies 에 필요한 모듈만 추가:
 
 ```kotlin
-implementation("com.github.junu-labs.indie-kit-android:indie-kit-analytics:v0.8.2")
-implementation("com.github.junu-labs.indie-kit-android:indie-kit-ads:v0.8.2")
+implementation("com.github.junu-labs.indie-kit-android:indie-kit-analytics:v0.9.0")
+implementation("com.github.junu-labs.indie-kit-android:indie-kit-ads:v0.9.0")
 ```
 
-**여러 모듈을 쓸 땐 버전을 반드시 똑같이 맞춘다** (위처럼 둘 다 `v0.8.2`). 모듈들은 속에서 `indie-kit-core` 를 함께 쓰는데, 버전을 섞으면 (`analytics:v0.1.0` + `ads:v0.7.1` 식) core 가 두 벌 딸려와 충돌할 수 있다.
+**여러 모듈을 쓸 땐 버전을 반드시 똑같이 맞춘다** (위처럼 둘 다 `v0.9.0`). 모듈들은 속에서 `indie-kit-core` 를 함께 쓰는데, 버전을 섞으면 (`analytics:v0.1.0` + `ads:v0.7.1` 식) core 가 두 벌 딸려와 충돌할 수 있다.
 
 광고만 필요한 앱은 광고 모듈만 추가 → 나머지 외부 라이브러리 (Firebase, 카카오, 구글, OkHttp, Compose) 가 빌드에 안 끼게 한다.
 
@@ -176,7 +176,8 @@ IndieKitAds.showRewarded(activity, placement = "hint") { reward -> /* ... */ }
 ## 최소 환경
 
 - Android 8.0 (API 26)
-- Kotlin 2.3+
+- Kotlin 2.4+ (이 태그를 받는 앱도 Kotlin 2.4 이상)
+- compileSdk 37 (앱도 37 로 컴파일)
 - AGP 9.1+
 - JDK 17 (바이트코드 타겟)
 - Gradle 9.3+
@@ -225,6 +226,7 @@ export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
 
 | 버전 | 날짜 | 무엇을 했나 |
 |---|---|---|
+| `v0.9.0` | 2026-07-23 | 전체 의존성 정비 (앱 파급 포함). 툴체인: AGP 9.1.1→9.3.0, Kotlin 2.3.20→2.4.10, Gradle 9.6.1, compileSdk 36→37. 라이브러리: okhttp 4.12.0→5.4.0, coreKtx 1.19.0. **이 태그를 받는 앱은 Kotlin 2.4 이상 + compileSdk 37 로 함께 올려야 한다.** 빌드 JDK 를 21 로 (jitpack.yml, 산출물 바이트코드는 여전히 Java 17). 전체 빌드·테스트 통과. |
 | `v0.8.2` | 2026-07-23 | 의존성 정비 + fragment 경고 해결. `indie-kit-ads` 에 최신 `androidx.fragment:1.8.9` 를 직접 실어, Google Play Services 가 끌어오는 옛 fragment 1.1.0 을 밀어냄 (Play Console "오래된 SDK" 경고 대응 — 단출한 Compose 앱도 자동 해결). firebase/ads/ump/compose/serialization/coroutines/credentials/googleId/activity/kakao/maven-publish 최신 안정판으로 올림. AGP·Kotlin·okhttp·compileSdk 는 앱 파급 때문에 유지. |
 | `v0.8.1` | 2026-07-22 | `indie-kit-billing` — Play Billing 결제 라이브러리 7.1.1 → 9.1.0 (구글 정책 2026-08-31 부터 8.0.0 이상 필수 대응, 상품 조회 콜백 한 곳만 수정). `indie-kit-network` — 사진 / 파일 올리기 `postMultipart` 추가 (multipart/form-data). 앱이 손수 짜던 멀티파트 조립을 모듈로 흡수 (CrowdPick 검증분). |
 | `v0.8.0` | 2026-07-20 | 단계 6 `indie-kit-push` — 푸시 모듈 (권한 / FCM 알림 주소 등록 / 우리 서버 기기 등록 / 수신·누름 / 기기 안 예약 알림). 샌드박스 발송 실기기 검증 완료. `indie-kit-ads` 배너는 폭 맞춤 (적응형) + 회전 재적재로 전환 (iOS 자매와 짝). |

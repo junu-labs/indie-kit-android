@@ -1,9 +1,9 @@
 # JitPack 빌드 설정.
 #
 # 왜 필요한가
-#  - jitpack.yml 이 없으면 JitPack 이 기본 JDK 를 고르는데, 그 기본값(예전 oracle 17.0.12)이
-#    JitPack 이미지에서 사라지면 "JAVA_HOME 이 잘못된 경로" 로 빌드가 깨진다.
-#  - 이 모듈은 JDK 17 로 컴파일된다 (indie-kit-ads/build.gradle.kts 의 VERSION_17 / JVM_17).
-#    그래서 빌드 JDK 를 openjdk17 로 못박는다.
+#  - jitpack.yml 이 없으면 JitPack 이 기본 JDK 를 고르는데, 그 기본값이 JitPack 이미지에서
+#    사라지면 "JAVA_HOME 이 잘못된 경로" 로 빌드가 깨진다. 그래서 빌드 JDK 를 못박는다.
+#  - 빌드를 "돌리는" JDK 는 21 (AGP 9.3 / Gradle 9.6 을 돌리려면 21 이 안전. 로컬도 21 로 검증).
+#  - 산출물 바이트코드는 여전히 Java 17 (build.gradle.kts 의 VERSION_17 / JVM_17) — 앱은 JDK 17 로도 사용 가능.
 jdk:
-  - openjdk17
+  - openjdk21

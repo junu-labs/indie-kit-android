@@ -22,7 +22,7 @@ plugins {
 
 android {
     namespace = "kr.co.junu.indiekit.push"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         minSdk = 26
