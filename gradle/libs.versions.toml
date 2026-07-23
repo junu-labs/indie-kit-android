@@ -12,8 +12,9 @@
 
 [versions]
 # AGP / Kotlin 은 툴체인 — 올리면 이 .aar 를 받는 앱들도 같은 버전(이상)으로 맞춰야 한다.
-# AGP 는 Android Studio 가 지원하는 최신에 맞춘다 (9.2.1). 그보다 높이면 스튜디오가 프로젝트를 못 연다.
-agp = "9.2.1"
+# AGP 는 Android Studio 가 지원하는 최신까지만 (그보다 높이면 스튜디오가 프로젝트를 못 연다).
+# 2026-07 스튜디오 업데이트 후 9.3.0 지원 확인.
+agp = "9.3.0"
 kotlin = "2.4.10"
 junit = "4.13.2"
 mavenPublish = "0.37.0"
@@ -25,9 +26,8 @@ firebaseBom = "34.16.0"
 playServicesAds = "25.4.0"
 userMessagingPlatform = "4.0.0"
 composeBom = "2026.06.01"
-# coreKtx 1.19.0 은 compileSdk 37 을 요구하는데, compileSdk 37 은 현재 Android Studio (AGP 9.2.1)
-# 세대엔 이르다. compileSdk 36 에서 도는 1.18.0 유지.
-coreKtx = "1.18.0"
+# coreKtx 1.19.0 은 compileSdk 37 을 요구 — 모듈 compileSdk 37 과 함께 감 (앱들도 37 로 컴파일해야 함).
+coreKtx = "1.19.0"
 
 # androidx.fragment — 우리 코드는 안 쓰지만, 광고 / 통계 모듈이 끌어오는 Google Play Services
 # (play-services-basement) 가 옛 fragment 1.1.0 을 추이로 딸려 온다. Play Console 이 "오래된 SDK

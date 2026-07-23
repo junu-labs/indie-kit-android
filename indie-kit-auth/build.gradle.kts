@@ -24,7 +24,7 @@ plugins {
 
 android {
     namespace = "kr.co.junu.indiekit.auth"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         minSdk = 26
