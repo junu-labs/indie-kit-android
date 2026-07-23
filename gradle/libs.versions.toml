@@ -38,7 +38,7 @@ kotlinxCoroutines = "1.8.1"
 #  - billing-ktx: Play Billing 의 Kotlin 확장. suspend / coroutines 친화 헬퍼 포함.
 #  - 사용처 (앱) 가 Play Billing 의 BillingClient / ProductDetails 등을 직접 만지는 경우가 있어 api 노출.
 #  - 시작은 v7.1.1 (안정 최신) — v8 마이그레이션은 별도 단계.
-playBilling = "7.1.1"
+playBilling = "9.1.0"
 
 # 5단계 추가 — Auth (Google Credential Manager + Kakao SDK).
 #  - androidx.credentials: Android 14+ 표준 인증 API. 옛 play-services-auth 의 후속.

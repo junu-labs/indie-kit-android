@@ -2,7 +2,7 @@
  * IndieKitBilling.kt — IndieKitBilling
  *
  * 역할
- *  - Google Play Billing v7 위에 얇은 래퍼. 자동 갱신 구독 + 비소진형 1회성 결제를 같은 그릇으로.
+ *  - Google Play Billing v9 위에 얇은 래퍼. 자동 갱신 구독 + 비소진형 1회성 결제를 같은 그릇으로.
  *  - 구매 후 자동 acknowledge (Play 정책상 3일 내 호출 안 하면 자동 환불).
  *  - 보유 권한 (entitlements) 를 StateFlow 로 노출 — Compose 에서 collectAsState 한 줄.
  *
@@ -421,9 +421,11 @@ public object IndieKitBilling {
             )
             .build()
 
-        client.queryProductDetailsAsync(params) { result, productDetailsList ->
+        client.queryProductDetailsAsync(params) { result, queryResult ->
+            // Play Billing 9 부터 콜백 두 번째 값이 상품 목록 자체가 아니라 그것을 감싼 상자로 바뀜.
+            // (상자 안에는 못 받아온 상품 목록도 함께 들어 있으나 여기선 받은 목록만 씀.)
             if (result.responseCode == BillingClient.BillingResponseCode.OK) {
-                if (cont.isActive) cont.resume(productDetailsList)
+                if (cont.isActive) cont.resume(queryResult.productDetailsList)
             } else {
                 IKLogger.billing.warning("queryProductDetailsAsync 실패: ${result.debugMessage}")
                 // 실패해도 빈 목록으로 진행 — 검증 단계에서 ProductNotFound 로 잡힘.

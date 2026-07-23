@@ -24,10 +24,18 @@
  *  val info: AppInfo  = net.get("/appInfo")
  *  val user: User     = net.post("/users", body = NewUser(name = "Alice"))
  *  net.delete("/items/42")
+ *
+ *  // 사진 / 파일 올리기 (multipart/form-data):
+ *  val poll: Poll = net.postMultipart(
+ *      "/polls/",
+ *      fields = mapOf("content" to "제목", "deadline_preset" to "24h"),
+ *      files = listOf(MultipartFile(field = "image", bytes = jpegBytes, fileName = "photo.jpg", mimeType = "image/jpeg"))
+ *  )
  *  ```
  *
  * 주의사항
- *  - 멀티파트 업로드, 진행률 콜백, 자동 재시도 (네트워크 일시 단절) 는 범위 밖.
+ *  - 멀티파트 업로드는 `postMultipart` 로 지원 (사진 / 파일 올리기). 인증 첨부·401 갱신 그대로 작동.
+ *  - 진행률 콜백, 자동 재시도 (네트워크 일시 단절) 는 범위 밖.
  *    필요하면 `send(Request)` raw 출구를 통해 직접 처리.
  *  - inline reified 함수가 호출하는 internal 헬퍼는 @PublishedApi internal — 사용처에서 직접 호출은 안 되지만
  *    inline 함수 본문에서는 보인다.
@@ -43,6 +51,7 @@ import kotlinx.serialization.serializer
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -170,6 +179,29 @@ public class IndieKitNetwork(
     ) {
         val request = buildRequest("DELETE", path, query, body = null, contentType = null, headers = headers)
         send(request)
+    }
+
+    /**
+     * multipart/form-data 로 글자 필드 + 파일을 함께 보내고 응답 JSON 을 R 로 풀어 돌려준다.
+     *
+     * 서버가 "사진 있으면 multipart, 없으면 JSON" 규칙일 때 사진 있는 쪽 담당.
+     * 인증 헤더 자동 첨부 + 401 자동 갱신은 다른 호출과 똑같이 작동한다.
+     *
+     * iOS 자매의 `postMultipart` 와 같은 위치.
+     *
+     * @param fields 글자 값 필드들. JSON 배열을 문자열로 넣어야 하면 미리 문자열로 만들어 넣는다.
+     * @param files 함께 올릴 파일들. 비우면 파일 없는 multipart.
+     */
+    public suspend inline fun <reified R> postMultipart(
+        path: String,
+        fields: Map<String, String> = emptyMap(),
+        files: List<MultipartFile> = emptyList(),
+        query: Map<String, String> = emptyMap(),
+        headers: Map<String, String> = emptyMap()
+    ): R {
+        val request = buildMultipartRequest(path, query, fields, files, headers)
+        val response = send(request)
+        return decode(response.body, serializer<R>())
     }
 
     /**
@@ -327,6 +359,39 @@ public class IndieKitNetwork(
     }
 
     /**
+     * multipart/form-data 요청을 빌드한다. OkHttp 의 MultipartBody 로 글자 필드 → 파일 순으로 담는다.
+     * boundary / Content-Type 은 OkHttp 가 알아서 채운다.
+     */
+    @PublishedApi
+    internal fun buildMultipartRequest(
+        path: String,
+        query: Map<String, String>,
+        fields: Map<String, String>,
+        files: List<MultipartFile>,
+        headers: Map<String, String>
+    ): Request {
+        val url = resolveUrl(path, query)
+
+        val bodyBuilder = MultipartBody.Builder().setType(MultipartBody.FORM)
+        for ((k, v) in fields) bodyBuilder.addFormDataPart(k, v)
+        for (f in files) {
+            bodyBuilder.addFormDataPart(
+                f.field,
+                f.fileName,
+                f.bytes.toRequestBody(f.mimeType.toMediaType())
+            )
+        }
+
+        val builder = Request.Builder().url(url)
+        // 기본 헤더 → 호출별 헤더 순 (호출별 우선). Content-Type 은 MultipartBody 가 boundary 와 함께 지정.
+        for ((k, v) in defaultHeaders) builder.header(k, v)
+        for ((k, v) in headers) builder.header(k, v)
+        builder.post(bodyBuilder.build())
+
+        return builder.build()
+    }
+
+    /**
      * JSON 인코딩 — kotlinx.serialization Json 으로 ByteArray.
      */
     @PublishedApi
@@ -376,3 +441,22 @@ public class IndieKitNetwork(
 /** body 가 있을 때의 기본 Content-Type. */
 @PublishedApi
 internal const val JSON_MEDIA: String = "application/json; charset=utf-8"
+
+/**
+ * multipart/form-data 로 올릴 파일 한 개.
+ *
+ * `postMultipart` 의 `files` 에 담아 보낸다. 사진 한 장이면 원소 하나짜리 리스트.
+ *
+ * iOS 자매의 `MultipartFile` 과 1:1 대응.
+ *
+ * @param field 서버가 받는 폼 필드 이름 (예: "image").
+ * @param bytes 파일 내용.
+ * @param fileName 서버에 알려 줄 파일 이름. 서버가 확장자로 종류를 볼 수 있으니 실제 확장자에 맞춘다.
+ * @param mimeType 파일 종류 (예: "image/jpeg", "image/png"). 모르면 "application/octet-stream".
+ */
+public class MultipartFile(
+    public val field: String,
+    public val bytes: ByteArray,
+    public val fileName: String = "file",
+    public val mimeType: String = "application/octet-stream"
+)

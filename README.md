@@ -12,8 +12,8 @@
 |---|---|---|---|
 | `indie-kit-analytics` | Firebase Analytics — 화면 이동 / 이벤트 / 사용자 속성 | 1 | 라이브러리 완성, SolTi 통합 검증 예정 |
 | `indie-kit-ads` | AdMob 배너 / 전면 / 리워드 / Native + 유럽 광고 동의창 | 2 | **실기기 검증 완료** (자리 (placement) 별 광고 ID 는 에뮬레이터 검증) |
-| `indie-kit-network` | OkHttp 위 얇은 호출 묶음 + 인증값 자동 갱신 | 3 | 라이브러리 완성, 데모 검증 |
-| `indie-kit-billing` | Play Billing v7 — 구독 / 1회성 / 평생 결제 | 4 | 라이브러리 완성, 데모 검증 |
+| `indie-kit-network` | OkHttp 위 얇은 호출 묶음 + 인증값 자동 갱신 + 사진 / 파일 올리기 (multipart) | 3 | 라이브러리 완성, 데모 검증 |
+| `indie-kit-billing` | Play Billing v9 — 구독 / 1회성 / 평생 결제 | 4 | 라이브러리 완성, 데모 검증 |
 | `indie-kit-auth` | 카카오 / 구글 로그인 + 우리 서버 세션 발급 | 5 | 라이브러리 완성, 데모 검증 |
 | `indie-kit-push` | 알림 권한 / FCM 알림 주소 등록 / 수신·누름 / 기기 안 예약 알림 | 6 | **실기기 검증 완료** (샌드박스 발송 확인) — 설계는 `PUSH_PLAN.md` |
 
@@ -225,6 +225,7 @@ export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
 
 | 버전 | 날짜 | 무엇을 했나 |
 |---|---|---|
+| `v0.8.1` | 2026-07-22 | `indie-kit-billing` — Play Billing 결제 라이브러리 7.1.1 → 9.1.0 (구글 정책 2026-08-31 부터 8.0.0 이상 필수 대응, 상품 조회 콜백 한 곳만 수정). `indie-kit-network` — 사진 / 파일 올리기 `postMultipart` 추가 (multipart/form-data). 앱이 손수 짜던 멀티파트 조립을 모듈로 흡수 (CrowdPick 검증분). |
 | `v0.8.0` | 2026-07-20 | 단계 6 `indie-kit-push` — 푸시 모듈 (권한 / FCM 알림 주소 등록 / 우리 서버 기기 등록 / 수신·누름 / 기기 안 예약 알림). 샌드박스 발송 실기기 검증 완료. `indie-kit-ads` 배너는 폭 맞춤 (적응형) + 회전 재적재로 전환 (iOS 자매와 짝). |
 | `v0.7.1` | 2026-06-25 | 빌드 환경 고침 — `jitpack.yml` 로 빌드 JDK 를 openjdk17 로 고정 (없으면 출시본 빌드가 깨짐). 코드 변경 없음. |
 | `v0.7.0` | 2026-06-25 | `indie-kit-ads` — 광고 ID 설정 정리 (자리 이름 → ID 묶음 한 가지로 통일, iOS 자매와 같은 모양). 출시 빌드에서 운영 ID 가 비면 테스트 광고를 띄우지 않고 아예 미표시 (구글 정책 위반 차단). |

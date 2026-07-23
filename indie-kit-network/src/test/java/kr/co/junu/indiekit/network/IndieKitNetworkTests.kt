@@ -237,6 +237,55 @@ class IndieKitNetworkTests {
         assertFalse(entries[0].didRefreshToken)
     }
 
+    // ────────────────────────────────────────────────────────────────────
+    // 9. postMultipart — 글자 필드 + 파일이 본문에 담기고 응답 풀기
+    // ────────────────────────────────────────────────────────────────────
+
+    @Serializable
+    data class CreatedPoll(val id: String)
+
+    @Test
+    fun `postMultipart 가 글자 필드와 파일을 본문에 담고 응답을 푼다`() = runBlocking {
+        val capturedBody = AtomicReference<String>()
+        val capturedContentType = AtomicReference<String>()
+
+        val net = IndieKitNetwork(
+            baseURL = "https://api.test",
+            client = fakeClient(
+                listOf(FakeResponse(statusCode = 200, bodyJson = """{"id":"p_1"}""")),
+                onRequest = { request ->
+                    capturedContentType.set(request.body?.contentType()?.toString())
+                    val buffer = okio.Buffer()
+                    request.body?.writeTo(buffer)
+                    capturedBody.set(buffer.readUtf8())
+                }
+            )
+        )
+
+        val file = MultipartFile(
+            field = "image",
+            bytes = byteArrayOf(1, 2, 3),
+            fileName = "photo.jpg",
+            mimeType = "image/jpeg"
+        )
+        val created: CreatedPoll = net.postMultipart(
+            "/polls/",
+            fields = mapOf("content" to "hello"),
+            files = listOf(file)
+        )
+        assertEquals("p_1", created.id)
+
+        assertTrue(
+            "Content-Type 이 multipart/form-data (실제: ${capturedContentType.get()})",
+            capturedContentType.get()?.startsWith("multipart/form-data") == true
+        )
+        val body = capturedBody.get()
+        assertTrue("content 필드", body.contains("name=\"content\""))
+        assertTrue("hello 값", body.contains("hello"))
+        assertTrue("image 파일 구획", body.contains("name=\"image\"; filename=\"photo.jpg\""))
+        assertTrue("image/jpeg 종류", body.contains("image/jpeg"))
+    }
+
     // ════════════════════════════════════════════════════════════════════
     // 헬퍼 — OkHttp Interceptor 로 응답 시퀀스 주입
     // ════════════════════════════════════════════════════════════════════
