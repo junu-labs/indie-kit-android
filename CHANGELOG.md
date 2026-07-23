@@ -4,6 +4,58 @@
 
 자매 저장소: [`indie-kit-ios`](https://github.com/junu-labs/indie-kit-ios). iOS 와 단계 번호가 1:1 대칭이며, 같은 단계라도 데모 검증 시점이 다르면 태그 번호가 어긋날 수 있다.
 
+## [0.9.1] - 2026-07-23
+
+### 바뀜 (툴체인 — Android Studio 업데이트 후 마저 올림)
+
+- AGP 9.2.1 → 9.3.0, compileSdk 36 → 37 (모든 모듈), coreKtx 1.18.0 → 1.19.0 (1.19.0 이 compileSdk 37 을 요구).
+- 이 태그를 받는 앱은 compileSdk 37 로 컴파일해야 한다 (Kotlin 2.4 이상 요구는 0.9.0 과 동일).
+
+### 검증
+
+- clean 빌드 + 전체 단위 테스트 통과. 네 앱 (SolTi / TouchCart / TapCounter / CrowdPick) 이 v0.9.1 로 빌드되는 것 확인.
+
+## [0.9.0] - 2026-07-23
+
+### 바뀜 (전체 의존성 정비 — 앱 파급 포함)
+
+- 툴체인: AGP 9.1.1 → 9.2.1 (Android Studio 지원 한도에 맞춤), Kotlin 2.3.20 → 2.4.10, Gradle 9.6.1. **이 태그를 받는 앱은 Kotlin 2.4 이상으로 함께 올려야 한다.**
+- okhttp 4.12.0 → 5.4.0 (메이저 — okhttp3 패키지 이름이 그대로라 사용처 코드 무변경).
+- AGP 9 내장 Kotlin 으로 전환 — kotlin-android 플러그인 제거, Kotlin 버전은 루트 buildscript 로 고정 (동기화 때 뜨던 지원 중단 경고 해소). 앱이 받는 .aar 는 동일.
+- 빌드 JDK 를 21 로 (jitpack.yml) — 산출물 바이트코드는 여전히 Java 17 이라 앱은 JDK 17 로도 사용 가능.
+
+### 검증
+
+- clean 빌드 + 전체 단위 테스트 통과.
+
+## [0.8.2] - 2026-07-23
+
+### 고침 (indie-kit-ads — Play Console "오래된 SDK (fragment 1.1.0)" 경고)
+
+- Google Play Services (play-services-basement) 가 추이로 끌어오는 옛 androidx.fragment 1.1.0 을, 최신 1.8.9 를 직접 실어 밀어냄. 이 모듈을 쓰는 앱은 단출한 Compose 앱 (TapCounter 처럼 화면이동 라이브러리가 없는 앱) 이라도 자동 해결.
+
+### 바뀜 (의존성 정비 — 앱 파급 없는 안전분)
+
+- firebaseBom 34.16.0 / playServicesAds 25.4.0 / UMP 4.0.0 / composeBom 2026.06.01 / kotlinxSerialization 1.11.0 / kotlinxCoroutines 1.11.0 / androidxCredentials 1.6.0 / googleId 1.2.0 / androidxActivity 1.13.0 / kakaoSdk 2.24.0 / mavenPublish 0.37.0.
+
+### 검증
+
+- 전체 빌드 + 단위 테스트 통과.
+
+## [0.8.1] - 2026-07-22
+
+### 바뀜 (indie-kit-billing — Play Billing 7.1.1 → 9.1.0)
+
+- 구글 정책 (2026-08-31 부터 8.0.0 이상 필수) 대응. 상품 조회 콜백이 목록을 감싼 상자 (QueryProductDetailsResult) 로 바뀐 한 곳만 수정 — 모듈 공개 API 는 그대로.
+
+### 추가 (indie-kit-network — 사진 / 파일 올리기)
+
+- `postMultipart` (multipart/form-data) + `MultipartFile` 자료형. 인증 첨부·401 갱신은 다른 호출과 동일. 앱이 손수 짜던 멀티파트 조립을 모듈로 흡수 (CrowdPick 검증분).
+
+### 검증
+
+- 단위 테스트 통과 (멀티파트 포함 9개).
+
 ## [0.8.0] - 2026-07-20
 
 ### 추가 (indie-kit-push — 푸시 모듈, 6단계)
