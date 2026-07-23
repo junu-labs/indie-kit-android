@@ -14,7 +14,6 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     alias(libs.plugins.android.library)
-    alias(libs.plugins.kotlin.android)
     // 3단계 — @Serializable 코드 생성. Kotlin 컴파일러와 같은 버전.
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.maven.publish)
