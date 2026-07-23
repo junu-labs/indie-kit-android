@@ -15,3 +15,6 @@ captures/
 
 # macOS
 .DS_Store
+
+# Gradle 데몬 JVM 기준 파일 — 로컬 빌드가 자동 생성. JDK 는 jitpack.yml(openjdk17) 이 기준.
+gradle/gradle-daemon-jvm.properties
