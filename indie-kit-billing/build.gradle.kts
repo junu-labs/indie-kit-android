@@ -19,7 +19,7 @@ plugins {
 
 android {
     namespace = "kr.co.junu.indiekit.billing"
-    compileSdk = 37
+    compileSdk = 36
 
     defaultConfig {
         minSdk = 26

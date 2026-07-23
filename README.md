@@ -177,7 +177,7 @@ IndieKitAds.showRewarded(activity, placement = "hint") { reward -> /* ... */ }
 
 - Android 8.0 (API 26)
 - Kotlin 2.4+ (이 태그를 받는 앱도 Kotlin 2.4 이상)
-- compileSdk 37 (앱도 37 로 컴파일)
+- compileSdk 36
 - AGP 9.1+
 - JDK 17 (바이트코드 타겟)
 - Gradle 9.3+
@@ -226,7 +226,7 @@ export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
 
 | 버전 | 날짜 | 무엇을 했나 |
 |---|---|---|
-| `v0.9.0` | 2026-07-23 | 전체 의존성 정비 (앱 파급 포함). 툴체인: AGP 9.1.1→9.3.0, Kotlin 2.3.20→2.4.10, Gradle 9.6.1, compileSdk 36→37. 라이브러리: okhttp 4.12.0→5.4.0, coreKtx 1.19.0. **이 태그를 받는 앱은 Kotlin 2.4 이상 + compileSdk 37 로 함께 올려야 한다.** 빌드 JDK 를 21 로 (jitpack.yml, 산출물 바이트코드는 여전히 Java 17). 전체 빌드·테스트 통과. |
+| `v0.9.0` | 2026-07-23 | 전체 의존성 정비 (앱 파급 포함). 툴체인: AGP 9.1.1→9.2.1 (Android Studio 지원 최신), Kotlin 2.3.20→2.4.10, Gradle 9.6.1. 라이브러리: okhttp 4.12.0→5.4.0. AGP 9 내장 Kotlin 으로 전환 (kotlin-android 플러그인 제거, 버전은 루트 buildscript 로 고정). **이 태그를 받는 앱은 Kotlin 2.4 이상으로 함께 올려야 한다** (compileSdk 는 36 그대로). 빌드 JDK 21 (jitpack.yml, 산출물 바이트코드는 여전히 Java 17). 전체 빌드·테스트 통과. |
 | `v0.8.2` | 2026-07-23 | 의존성 정비 + fragment 경고 해결. `indie-kit-ads` 에 최신 `androidx.fragment:1.8.9` 를 직접 실어, Google Play Services 가 끌어오는 옛 fragment 1.1.0 을 밀어냄 (Play Console "오래된 SDK" 경고 대응 — 단출한 Compose 앱도 자동 해결). firebase/ads/ump/compose/serialization/coroutines/credentials/googleId/activity/kakao/maven-publish 최신 안정판으로 올림. AGP·Kotlin·okhttp·compileSdk 는 앱 파급 때문에 유지. |
 | `v0.8.1` | 2026-07-22 | `indie-kit-billing` — Play Billing 결제 라이브러리 7.1.1 → 9.1.0 (구글 정책 2026-08-31 부터 8.0.0 이상 필수 대응, 상품 조회 콜백 한 곳만 수정). `indie-kit-network` — 사진 / 파일 올리기 `postMultipart` 추가 (multipart/form-data). 앱이 손수 짜던 멀티파트 조립을 모듈로 흡수 (CrowdPick 검증분). |
 | `v0.8.0` | 2026-07-20 | 단계 6 `indie-kit-push` — 푸시 모듈 (권한 / FCM 알림 주소 등록 / 우리 서버 기기 등록 / 수신·누름 / 기기 안 예약 알림). 샌드박스 발송 실기기 검증 완료. `indie-kit-ads` 배너는 폭 맞춤 (적응형) + 회전 재적재로 전환 (iOS 자매와 짝). |
