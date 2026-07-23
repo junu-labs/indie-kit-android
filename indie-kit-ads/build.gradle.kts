@@ -77,6 +77,12 @@ dependencies {
     // androidx.core — Drawable.toBitmap 확장 함수 (Native 광고의 아이콘 표시).
     implementation(libs.androidx.core.ktx)
 
+    // androidx.fragment — 코드에서 직접 쓰진 않는다. play-services-ads 가 끌어오는
+    // Google Play Services (play-services-basement) 가 옛 fragment 1.1.0 을 추이로 딸려 와
+    // Play Console 이 "오래된 SDK" 경고를 낸다. 최신 fragment 를 직접 실어 밀어낸다.
+    // 이 모듈을 쓰는 앱은 (단출한 Compose 앱이라도) 자동으로 최신 fragment 가 번들에 실린다.
+    implementation(libs.androidx.fragment)
+
     testImplementation(libs.junit)
 }
 

@@ -11,19 +11,26 @@
 #    데모가 9.1.1 로 올라간 시점에 라이브러리도 9.1.1 로 정렬. 라이브러리 산출물 (.aar) 자체엔 영향 없음.
 
 [versions]
+# AGP / Kotlin 은 툴체인 — 올리면 이 .aar 를 받는 앱들도 같은 버전으로 맞춰야 하므로 정비 시 함께 결정한다.
 agp = "9.1.1"
 kotlin = "2.3.20"
 junit = "4.13.2"
-mavenPublish = "0.30.0"
+mavenPublish = "0.37.0"
 
 # 1단계 추가 — Firebase Analytics. SolTi 와 같은 BOM 으로 묶어 Crashlytics 등 형제 라이브러리도 같은 시점 일치.
-firebaseBom = "34.10.0"
+firebaseBom = "34.16.0"
 
 # 2단계 추가 — AdMob (배너 / 전면 / 리워드 / Native) + UMP (유럽 광고 동의창) + Compose.
-playServicesAds = "25.1.0"
-userMessagingPlatform = "3.2.0"
-composeBom = "2026.03.00"
+playServicesAds = "25.4.0"
+userMessagingPlatform = "4.0.0"
+composeBom = "2026.06.01"
+# coreKtx 1.19.0 은 compileSdk 37 을 요구 → 앱들도 37 로 강제됨. compileSdk 36 에서 도는 1.18.0 유지.
 coreKtx = "1.18.0"
+
+# androidx.fragment — 우리 코드는 안 쓰지만, 광고 / 통계 모듈이 끌어오는 Google Play Services
+# (play-services-basement) 가 옛 fragment 1.1.0 을 추이로 딸려 온다. Play Console 이 "오래된 SDK
+# (fragment 1.1.0)" 경고를 내므로, 최신을 직접 좌표로 넣어 밀어낸다 (indie-kit-ads 에 implementation).
+fragment = "1.8.9"
 
 # 3단계 추가 — Network (OkHttp + kotlinx.serialization + kotlinx.coroutines).
 #  - okhttp: 검증된 HTTP 클라이언트. SolTi / TapCounter 도 같은 계열.
@@ -31,13 +38,13 @@ coreKtx = "1.18.0"
 #  - kotlinx-coroutines-core: suspend 함수 + withContext(Dispatchers.IO). 사용처도 같이 끌고 가야 하므로 api 노출.
 #  - kotlin-serialization plugin 의 버전은 Kotlin 컴파일러와 같이 간다 (plugins 절 참고).
 okhttp = "4.12.0"
-kotlinxSerialization = "1.7.3"
-kotlinxCoroutines = "1.8.1"
+kotlinxSerialization = "1.11.0"
+kotlinxCoroutines = "1.11.0"
 
 # 4단계 추가 — Billing (Google Play Billing).
 #  - billing-ktx: Play Billing 의 Kotlin 확장. suspend / coroutines 친화 헬퍼 포함.
 #  - 사용처 (앱) 가 Play Billing 의 BillingClient / ProductDetails 등을 직접 만지는 경우가 있어 api 노출.
-#  - 시작은 v7.1.1 (안정 최신) — v8 마이그레이션은 별도 단계.
+#  - v9.1.0 (안정 최신). 구글 정책상 2026-08-31 부터 8.0.0 이상 필수라 7.1.1 → 9.1.0 으로 올림.
 playBilling = "9.1.0"
 
 # 5단계 추가 — Auth (Google Credential Manager + Kakao SDK).
@@ -46,15 +53,15 @@ playBilling = "9.1.0"
 #  - googleid: "Sign in with Google" 의 Credential 옵션 (GetGoogleIdOption). Credential Manager 와 같이 사용.
 #  - kakao SDK: 카카오 로그인 본체 (v2-user + v2-auth + v2-common).
 #  - 모두 안드로이드 전용. iOS 자매와 같은 API 모양 (configure / signIn / signOut / unlink) 으로 감쌈.
-androidxCredentials = "1.3.0"
-googleId = "1.1.1"
-kakaoSdk = "2.20.6"
+androidxCredentials = "1.6.0"
+googleId = "1.2.0"
+kakaoSdk = "2.24.0"
 
 # 6단계 추가 — Push (알림 권한 / FCM 알림 주소 / 수신·누름 / 로컬 예약 알림).
 #  - firebase-messaging: FCM 본체 (알림 주소 발급 + 수신 서비스). 버전은 firebase-bom 이 관리.
 #  - androidx-activity: requestPermission 이 권한 팝업 결과를 받으려면 ComponentActivity 의
 #    activityResultRegistry 가 필요. Compose 앱은 이미 ComponentActivity 기반이라 추가 부담 없음.
-androidxActivity = "1.9.3"
+androidxActivity = "1.13.0"
 
 [libraries]
 # 단위 테스트 — 모든 모듈 공용 (모듈마다 PlaceholderTest 또는 실제 테스트에서 사용).
@@ -79,6 +86,8 @@ androidx-compose-material3 = { group = "androidx.compose.material3", name = "mat
 androidx-compose-ui = { group = "androidx.compose.ui", name = "ui" }
 androidx-compose-ui-tooling-preview = { group = "androidx.compose.ui", name = "ui-tooling-preview" }
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
+# 광고 / 통계 모듈이 끌어오는 Google Play Services 의 옛 fragment 1.1.0 을 밀어내기 위한 직접 좌표 (위 fragment 주석 참고).
+androidx-fragment = { group = "androidx.fragment", name = "fragment", version.ref = "fragment" }
 
 # 3단계 IndieKitNetwork 가 끌어 쓸 OkHttp / 직렬화 라이브러리.
 #  - okhttp: HTTP 본체. 사용처가 raw Request / Response 를 직접 다룰 수 있게 api 노출.
