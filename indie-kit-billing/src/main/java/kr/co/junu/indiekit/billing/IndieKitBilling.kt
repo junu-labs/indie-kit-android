@@ -61,6 +61,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -69,6 +70,7 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kr.co.junu.indiekit.core.IKLogger
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
@@ -150,6 +152,24 @@ public object IndieKitBilling {
 
     /** configure 동시 호출 방지 + refreshEntitlements 동시 진행 방지. */
     private val mutex = Mutex()
+
+    /**
+     * 연결 시도 직렬화 — startConnection 이 동시에 두 번 돌지 않게.
+     * 위의 mutex 와 별도인 이유: 재확인 (mutex 보유 중) 안에서도 재연결이 필요할 수 있어
+     * 같은 자물쇠를 쓰면 순서가 꼬인다. 이 자물쇠는 오직 연결 시도에만 쓴다.
+     */
+    private val connectionMutex = Mutex()
+
+    /**
+     * 최근 구매 스티키 — productID → 만료 timestamp (ms epoch. 비소진형은 Long.MAX_VALUE).
+     *
+     * 방금 산 구매가 Play 의 queryPurchasesAsync 결과에 반영되기 전 (테스트 트랙 · 반영 지연) 에
+     * 재확인이 권한을 도로 지우지 못하게 union 대상으로 붙잡아 둔다. 재확인이 몇 번을 돌아도
+     * 스티키가 다시 들어가므로 "누가 마지막에 쓰느냐" 순서 싸움이 없다.
+     * 만료 지난 항목은 refreshEntitlementsInternal 이 스스로 정리한다 — 취소 후 만료도 정확.
+     * iOS 자매 (0.7.7) 의 recentPurchases 와 같은 패턴.
+     */
+    private val recentPurchases = ConcurrentHashMap<String, Long>()
 
     /**
      * 백그라운드 작업 scope.
@@ -284,8 +304,12 @@ public object IndieKitBilling {
             BillingClient.BillingResponseCode.OK -> {
                 if (!purchases.isNullOrEmpty()) {
                     for (p in purchases) {
-                        if (p.purchaseState == Purchase.PurchaseState.PURCHASED && !p.isAcknowledged) {
-                            acknowledgePurchase(p)
+                        if (p.purchaseState == Purchase.PurchaseState.PURCHASED) {
+                            if (!p.isAcknowledged) acknowledgeWithRetry(p)
+                            // 스티키 기록 + 즉시 반영 — 뒤이은 재확인 결과를 기다리지 않고
+                            // 결제 직후 바로 isPro 가 true 로 뜨게 하고, 어떤 재확인도
+                            // 이 권한을 지우지 못하게 붙잡아 둔다.
+                            rememberRecentPurchase(p)
                         }
                     }
                     refreshEntitlements()
@@ -329,8 +353,14 @@ public object IndieKitBilling {
         val client = billingClient ?: throw IndieKitBillingError.NotConfigured
         _isLoading.value = true
         try {
-            refreshEntitlementsInternal(client)
-            IKLogger.billing.info("복원 완료. 보유 권한 ${entitlements.value.size} 개")
+            // mutex 안에서 실행 — 결제 성공 직후의 재확인과 경쟁해 서로의 결과를
+            // 덮어쓰지 못하게 모든 권한 갱신을 한 줄로 세운다.
+            val ok = mutex.withLock { refreshEntitlementsInternal(client) }
+            if (ok) {
+                IKLogger.billing.info("복원 완료. 보유 권한 ${entitlements.value.size} 개")
+            } else {
+                IKLogger.billing.warning("복원 조회 실패 — 기존 권한 유지 (${entitlements.value.size} 개)")
+            }
         } finally {
             _isLoading.value = false
         }
@@ -382,11 +412,50 @@ public object IndieKitBilling {
                 }
 
                 override fun onBillingServiceDisconnected() {
-                    // 연결 끊김 — 다음 호출 시 자동 재연결 시도하도록 그냥 로그만.
-                    IKLogger.billing.warning("BillingClient 연결 끊김 — 다음 호출 시 재연결 시도")
+                    // 연결 끊김 — 곧바로 백오프 재연결을 시도한다.
+                    // (조회 직전에도 ensureConnected 가 한 번 더 살아 있는지 확인하므로 이중 안전망.)
+                    IKLogger.billing.warning("BillingClient 연결 끊김 — 백오프 재연결 시작")
+                    scope.launch {
+                        billingClient?.let { ensureConnected(it) }
+                    }
                 }
             })
         }
+
+    /**
+     * 연결이 살아 있는지 확인하고, 끊겨 있으면 유한 백오프 (0.5초 → 1초 → 2초) 로
+     * 최대 3번 재연결을 시도한다.
+     *
+     * @return true = 연결 살아 있음 (또는 재연결 성공). false = 3번 다 실패.
+     *
+     * connectionMutex 로 직렬화 — 연결 끊김 콜백과 조회 직전 확인이 동시에 들어와도
+     * startConnection 이 겹쳐 돌지 않는다. 자물쇠를 얻은 뒤 isReady 를 다시 확인하므로
+     * 앞사람이 이미 살려 놨으면 바로 통과한다.
+     */
+    private suspend fun ensureConnected(client: BillingClient): Boolean {
+        if (client.isReady) return true
+        connectionMutex.withLock {
+            if (client.isReady) return true
+            var delayMs = 500L
+            repeat(RECONNECT_MAX_ATTEMPTS) { attempt ->
+                try {
+                    connectClient(client)
+                    IKLogger.billing.info("BillingClient 재연결 성공 (시도 ${attempt + 1})")
+                    return true
+                } catch (e: Throwable) {
+                    IKLogger.billing.warning("BillingClient 재연결 실패 (시도 ${attempt + 1}/$RECONNECT_MAX_ATTEMPTS): ${e.message}")
+                    if (attempt < RECONNECT_MAX_ATTEMPTS - 1) {
+                        delay(delayMs)
+                        delayMs *= 2
+                    }
+                }
+            }
+        }
+        return false
+    }
+
+    /** 재연결 / acknowledge 재시도 횟수 상한. */
+    private const val RECONNECT_MAX_ATTEMPTS = 3
 
     /** INAPP / SUBS 상품 정보를 따로 조회해 합친다. */
     private suspend fun loadProducts(client: BillingClient, descriptors: List<ProductDescriptor>) {
@@ -434,30 +503,61 @@ public object IndieKitBilling {
         }
     }
 
-    /** Play Billing 의 acknowledgePurchase 를 suspend 로. */
-    private suspend fun acknowledgePurchase(purchase: Purchase): Unit =
+    /**
+     * acknowledge 를 유한 백오프 (1초 → 2초) 로 최대 3번 시도한다.
+     *
+     * 미승인 구매는 Play 정책상 3일 뒤 자동 환불되므로 한 번 실패로 끝내면 위험하다.
+     * 3번 다 실패해도 다음 재확인 (refreshEntitlementsInternal) 이 미승인 구매를 다시
+     * acknowledge 하는 안전망이 있어 무한 재시도는 하지 않는다.
+     */
+    private suspend fun acknowledgeWithRetry(purchase: Purchase) {
+        var delayMs = 1_000L
+        repeat(RECONNECT_MAX_ATTEMPTS) { attempt ->
+            if (acknowledgePurchase(purchase)) {
+                if (attempt > 0) IKLogger.billing.info("acknowledge 성공 (재시도 ${attempt + 1}번째)")
+                return
+            }
+            if (attempt < RECONNECT_MAX_ATTEMPTS - 1) {
+                delay(delayMs)
+                delayMs *= 2
+            }
+        }
+        IKLogger.billing.warning(
+            "acknowledge ${RECONNECT_MAX_ATTEMPTS}번 모두 실패 — 다음 재확인 때 다시 시도 (3일 내 미승인 시 자동 환불 주의)"
+        )
+    }
+
+    /** Play Billing 의 acknowledgePurchase 를 suspend 로. @return 승인 성공 여부. */
+    private suspend fun acknowledgePurchase(purchase: Purchase): Boolean =
         suspendCancellableCoroutine { cont ->
             val client = billingClient
             if (client == null) {
-                if (cont.isActive) cont.resume(Unit)
+                if (cont.isActive) cont.resume(false)
                 return@suspendCancellableCoroutine
             }
             val params = AcknowledgePurchaseParams.newBuilder()
                 .setPurchaseToken(purchase.purchaseToken)
                 .build()
             client.acknowledgePurchase(params) { result ->
-                if (result.responseCode != BillingClient.BillingResponseCode.OK) {
-                    IKLogger.billing.warning("acknowledge 실패: ${result.debugMessage}")
+                val ok = result.responseCode == BillingClient.BillingResponseCode.OK
+                if (!ok) {
+                    IKLogger.billing.warning("acknowledge 실패: ${result.debugMessage} (code=${result.responseCode})")
                 }
-                if (cont.isActive) cont.resume(Unit)
+                if (cont.isActive) cont.resume(ok)
             }
         }
 
-    /** queryPurchasesAsync 를 suspend 로. INAPP / SUBS 따로 호출. */
+    /**
+     * queryPurchasesAsync 를 suspend 로. INAPP / SUBS 따로 호출.
+     *
+     * @return 성공 시 구매 목록 (없으면 빈 목록). **실패 시 null** — 호출부가
+     *         "조회가 실패한 것" 과 "정말 구매가 없는 것" 을 구분할 수 있어야
+     *         실패한 조회의 빈 결과가 이미 확보한 권한을 지우는 사고를 막는다.
+     */
     private suspend fun queryPurchases(
         client: BillingClient,
         type: String
-    ): List<Purchase> = suspendCancellableCoroutine { cont ->
+    ): List<Purchase>? = suspendCancellableCoroutine { cont ->
         val params = QueryPurchasesParams.newBuilder()
             .setProductType(type)
             .build()
@@ -465,8 +565,8 @@ public object IndieKitBilling {
             if (result.responseCode == BillingClient.BillingResponseCode.OK) {
                 if (cont.isActive) cont.resume(purchases)
             } else {
-                IKLogger.billing.warning("queryPurchases 실패: ${result.debugMessage}")
-                if (cont.isActive) cont.resume(emptyList())
+                IKLogger.billing.warning("queryPurchases 실패: ${result.debugMessage} (code=${result.responseCode})")
+                if (cont.isActive) cont.resume(null)
             }
         }
     }
@@ -483,17 +583,43 @@ public object IndieKitBilling {
      * INAPP + SUBS 보유 권한을 조회해 entitlements 와 만료 캐시를 갱신.
      *
      * 동작
+     *  - 조회 전 연결 생존 확인 (끊겼으면 백오프 재연결).
+     *  - **두 조회 (INAPP + SUBS) 가 모두 성공했을 때만 값을 교체한다.**
+     *    하나라도 실패 (null) 면 기존 권한을 그대로 유지 — 실패한 조회의 빈 결과가
+     *    이미 확보한 구독 권한을 지우는 사고 방지.
      *  - PURCHASED 상태인 구매만 인정.
      *  - 등록되지 않은 productID 는 무시 (configure 에서 등록 안 된 외부 결제 보호).
-     *  - 아직 acknowledge 안 된 구매가 있으면 여기서 acknowledge.
+     *  - 아직 acknowledge 안 된 구매가 있으면 여기서 acknowledge (재시도 포함).
      *  - 자동 갱신 구독은 만료 timestamp 근사 (purchaseTime + billing period).
+     *  - 마지막에 최근 구매 스티키를 union — 방금 산 구매가 Play 결과에 아직 안 올라와도
+     *    지워지지 않게. 만료 지난 스티키는 정리하므로 취소 후 만료 시엔 정상적으로 빠진다.
+     *
+     * @return true = 갱신 성공. false = 조회 실패로 기존 값 유지.
      */
-    private suspend fun refreshEntitlementsInternal(client: BillingClient) {
+    private suspend fun refreshEntitlementsInternal(client: BillingClient): Boolean {
+        // 연결이 죽었으면 조회가 전부 실패 응답만 돌려준다 — 먼저 살린다.
+        if (!ensureConnected(client)) {
+            IKLogger.billing.warning("재확인 건너뜀 — BillingClient 재연결 실패. 기존 권한 유지")
+            return false
+        }
+
         val newEntitlements = mutableSetOf<String>()
         val newExpirationCache = mutableMapOf<String, Long>()
 
-        // INAPP — 비소진형.
+        // INAPP — 비소진형. 조회 실패면 여기서 끝 (기존 값 유지).
         val inappPurchases = queryPurchases(client, BillingClient.ProductType.INAPP)
+        if (inappPurchases == null) {
+            IKLogger.billing.warning("INAPP 조회 실패 — 권한 갱신 중단, 기존 값 유지")
+            return false
+        }
+
+        // SUBS — 자동 갱신 구독. 마찬가지로 실패면 기존 값 유지.
+        val subsPurchases = queryPurchases(client, BillingClient.ProductType.SUBS)
+        if (subsPurchases == null) {
+            IKLogger.billing.warning("SUBS 조회 실패 — 권한 갱신 중단, 기존 값 유지")
+            return false
+        }
+
         for (p in inappPurchases) {
             if (p.purchaseState != Purchase.PurchaseState.PURCHASED) continue
             for (productID in p.products) {
@@ -501,11 +627,9 @@ public object IndieKitBilling {
                     newEntitlements.add(productID)
                 }
             }
-            if (!p.isAcknowledged) acknowledgePurchase(p)
+            if (!p.isAcknowledged) acknowledgeWithRetry(p)
         }
 
-        // SUBS — 자동 갱신 구독.
-        val subsPurchases = queryPurchases(client, BillingClient.ProductType.SUBS)
         for (p in subsPurchases) {
             if (p.purchaseState != Purchase.PurchaseState.PURCHASED) continue
             for (productID in p.products) {
@@ -525,12 +649,53 @@ public object IndieKitBilling {
                     }
                 }
             }
-            if (!p.isAcknowledged) acknowledgePurchase(p)
+            if (!p.isAcknowledged) acknowledgeWithRetry(p)
+        }
+
+        // 최근 구매 스티키 반영 — 만료 지난 것부터 정리한 뒤 남은 것을 union.
+        val now = System.currentTimeMillis()
+        recentPurchases.entries.removeAll { it.value <= now }
+        for ((productID, expiry) in recentPurchases) {
+            if (newEntitlements.add(productID)) {
+                IKLogger.billing.info("최근 구매 스티키로 인정 — $productID (Play 조회 반영 대기 중)")
+            }
+            if (expiry != Long.MAX_VALUE && newExpirationCache[productID] == null) {
+                newExpirationCache[productID] = expiry
+            }
         }
 
         expirationCache.clear()
         expirationCache.putAll(newExpirationCache)
         _entitlements.value = newEntitlements
+        return true
+    }
+
+    /**
+     * 방금 성공한 구매를 스티키에 기록하고 entitlements 에 즉시 반영한다.
+     *
+     * 스티키 만료 = 구독은 purchaseTime + billing period 근사, 비소진형은 무기한.
+     * (근사 기간을 못 구하면 무기한 — 앱 재시작 시 메모리와 함께 사라지므로 안전.)
+     * 스티키가 있는 동안엔 어떤 재확인도 이 권한을 지우지 못하고,
+     * 만료가 지나면 재확인이 스스로 정리해 정상적으로 무료로 돌아간다.
+     */
+    private fun rememberRecentPurchase(purchase: Purchase) {
+        for (productID in purchase.products) {
+            val type = productTypes[productID] ?: continue
+            val expiry = when (type) {
+                is BillingProductType.NonConsumable -> Long.MAX_VALUE
+                is BillingProductType.AutoRenewableSubscription -> {
+                    val periodIso = _products.value.find { it.productId == productID }
+                        ?.subscriptionOfferDetails?.firstOrNull()
+                        ?.pricingPhases?.pricingPhaseList?.firstOrNull()
+                        ?.billingPeriod
+                    val periodMs = periodIso?.let { isoPeriodToMs(it) } ?: 0L
+                    if (periodMs > 0L) purchase.purchaseTime + periodMs else Long.MAX_VALUE
+                }
+            }
+            recentPurchases[productID] = expiry
+            _entitlements.value = _entitlements.value + productID
+            IKLogger.billing.info("구매 즉시 반영 — $productID (스티키 만료 ${if (expiry == Long.MAX_VALUE) "무기한" else expiry.toString()})")
+        }
     }
 
     /**
