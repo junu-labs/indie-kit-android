@@ -21,6 +21,93 @@
 
 현재는 **6개 모듈 모두 작성 완료, 최신 태그 `v0.9.3`**. 광고 (`indie-kit-ads`) 와 푸시 (`indie-kit-push`) 는 실기기 검증까지 끝났고, 나머지는 데모 앱 검증 단계다. 다음은 SolTi 통합 검증.
 
+## 붙이려면 앱이 갖춰야 할 것 (`v0.9.3` 기준)
+
+**앱의 사양이 아래보다 낮으면 붙지 않는다.** 모듈을 올리기 전에 이 표부터 맞춘다.
+
+| 항목 | 앱이 맞춰야 할 값 | 안 맞으면 |
+|---|---|---|
+| AGP (안드로이드 그레이들 플러그인) | `9.3.0` | 라이브러리를 읽지 못하고 빌드가 깨진다 |
+| Kotlin | `2.4.10` (2.4 이상) | 모듈이 2.4 로 컴파일돼 있어 읽지 못한다 |
+| Gradle | `9.6.1` | AGP 9.3 이 요구한다 |
+| `compileSdk` | `37` | 모듈이 37 로 컴파일돼 있어 맞춰야 한다 |
+| `minSdk` | `26` 이상 | 26 보다 낮으면 병합 단계에서 막힌다 |
+| 빌드용 JDK | `21` 권장 | 그레이들을 *돌리는* 자리. 이 모듈은 로컬·JitPack 모두 21 로 검증했다 |
+| 산출물 바이트코드 | Java `17` | 앱도 17 로 맞춘다 (`jvmTarget` / `sourceCompatibility`) |
+| Compose BOM | `2026.06.01` | 앱이 자기 BOM 을 쓰면 그쪽이 이긴다 — 너무 낮으면 화면 진입점이 안 맞을 수 있다 |
+| `targetSdk` | 앱이 정한다 | 모듈은 요구하지 않는다 |
+
+**빌드용 JDK 와 산출물 바이트코드는 다른 것이다.** 앞의 21 은 그레이들을 돌리는 자바고,
+뒤의 17 은 만들어져 나오는 코드의 판이다. 둘 다 위 값으로 두면 된다.
+
+### 그대로 옮겨 쓰는 값
+
+`gradle/libs.versions.toml`
+
+```toml
+[versions]
+agp = "9.3.0"
+kotlin = "2.4.10"
+composeBom = "2026.06.01"
+```
+
+`gradle/wrapper/gradle-wrapper.properties`
+
+```properties
+distributionUrl=https\://services.gradle.org/distributions/gradle-9.6.1-bin.zip
+```
+
+`app/build.gradle.kts`
+
+```kotlin
+android {
+    compileSdk = 37
+    defaultConfig {
+        minSdk = 26
+    }
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+    }
+}
+```
+
+빌드용 JDK 는 터미널에서 이렇게 잡는다 (Android Studio 안에서는 자동).
+
+```bash
+export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
+```
+
+### 함께 딸려 오는 외부 라이브러리
+
+모듈을 붙이면 아래가 같이 실린다. 앱이 같은 라이브러리를 따로 쓰고 있으면 판이 겹치는지 본다.
+
+| 모듈 | 딸려 오는 것 |
+|---|---|
+| `indie-kit-ads` | play-services-ads `25.4.0`, user-messaging-platform `4.0.0`, Compose, androidx.fragment `1.8.9` |
+| `indie-kit-analytics` | firebase-bom `34.16.0` |
+| `indie-kit-network` | okhttp `5.4.0`, kotlinx-serialization `1.11.0`, kotlinx-coroutines `1.11.0` |
+| `indie-kit-billing` | play-billing `9.1.0` |
+| `indie-kit-auth` | androidx-credentials `1.6.0`, googleid `1.2.0`, kakao-sdk `2.24.0` |
+| `indie-kit-push` | firebase-bom `34.16.0` |
+
+### 사양이 올라간 이력
+
+옛 판을 쓰는 앱이 어디까지 올려야 하는지 볼 때 쓴다.
+
+| 태그 | 그때 올라간 것 |
+|---|---|
+| `v0.9.1` | compileSdk 36 → 37, AGP 9.2.1 → 9.3.0, coreKtx 1.18.0 → 1.19.0 |
+| `v0.9.0` | AGP 9.1.1 → 9.2.1, Kotlin 2.3.20 → 2.4.10, Gradle 9.6.1, okhttp 4.12.0 → 5.4.0. **이 태그부터 앱도 Kotlin 2.4 이상이어야 한다** |
+
+즉 `v0.9.0` 보다 낮은 판을 쓰는 앱은 **AGP · Kotlin · Gradle · compileSdk 네 줄을 함께 올려야** 한다.
+
 ## 사용 방법 (1단계 이후 적용)
 
 `settings.gradle.kts` 의 `dependencyResolutionManagement.repositories` 에 JitPack 추가:
@@ -175,12 +262,8 @@ IndieKitAds.showRewarded(activity, placement = "hint") { reward -> /* ... */ }
 
 ## 최소 환경
 
-- Android 8.0 (API 26)
-- Kotlin 2.4+ (이 태그를 받는 앱도 Kotlin 2.4 이상)
-- compileSdk 37 (앱도 37 로 컴파일)
-- AGP 9.1+
-- JDK 17 (바이트코드 타겟)
-- Gradle 9.3+
+위의 **[붙이려면 앱이 갖춰야 할 것](#붙이려면-앱이-갖춰야-할-것-v093-기준)** 항목에 한자리로 모았다.
+두 곳에 나눠 적으면 판을 올릴 때 한쪽만 고쳐져 어긋나므로 여기서는 가리키기만 한다.
 
 ## 폴더 구조
 
