@@ -44,9 +44,21 @@ internal class RewardedAdLoader private constructor(
         /** 자리 이름 → 적재기 보관소. */
         private val loaders = java.util.concurrent.ConcurrentHashMap<String, RewardedAdLoader>()
 
-        /** 자리 이름에 해당하는 적재기를 꺼낸다. 없으면 만들어 보관. */
-        fun loader(placement: String?): RewardedAdLoader =
-            loaders.getOrPut(placement ?: DEFAULT_KEY) { RewardedAdLoader(placement) }
+        /**
+         * 자리 이름에 해당하는 적재기를 꺼낸다. 없으면 만들어 보관.
+         *
+         * 자리 이름을 안 넘긴 것 (null) 과 [IndieKitAds.DEFAULT_PLACEMENT] ("default") 은
+         * **같은 자리** 라 한 칸을 같이 쓴다. 칸을 나누면 같은 광고 번호로 요청을 두 번 보내고
+         * 그중 하나는 화면에서 부를 길이 없어 영영 안 쓰인다.
+         */
+        fun loader(placement: String?): RewardedAdLoader {
+            val key = if (placement == null || placement == IndieKitAds.DEFAULT_PLACEMENT) {
+                DEFAULT_KEY
+            } else {
+                placement
+            }
+            return loaders.getOrPut(key) { RewardedAdLoader(placement) }
+        }
     }
 
     /** 적재된 리워드 광고 인스턴스. */

@@ -84,7 +84,9 @@ public fun BannerAdView(modifier: Modifier = Modifier, placement: String? = null
     val context = LocalContext.current
 
     // configure 안 한 상태면 placeholder Box — 광고 미표시.
-    if (!IndieKitAds.isConfigured) {
+    // isConfigured (평범한 Boolean) 대신 화면이 지켜볼 수 있는 자리를 읽는다.
+    // 그래야 configure 가 이 배너보다 늦게 끝나도 그 순간 스스로 다시 그려진다 — 빈 칸으로 굳지 않는다.
+    if (!IndieKitAds.isConfiguredForCompose) {
         Box(modifier = modifier.height(50.dp))
         return
     }

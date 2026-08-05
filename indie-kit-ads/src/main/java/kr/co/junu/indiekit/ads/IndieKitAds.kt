@@ -61,6 +61,9 @@ package kr.co.junu.indiekit.ads
 import android.app.Activity
 import android.app.Application
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
+import androidx.compose.runtime.mutableIntStateOf
 import kr.co.junu.indiekit.core.AnalyticsValue
 import kr.co.junu.indiekit.core.IKLogger
 import kr.co.junu.indiekit.core.analyticsParams
@@ -96,9 +99,27 @@ public object IndieKitAds {
     private var rewardedAdUnitIDs: Map<String, AdUnitID> = emptyMap()
     private var nativeAdUnitIDs: Map<String, AdUnitID> = emptyMap()
 
+    /**
+     * configure 가 끝난 것을 *화면이 지켜볼 수 있는 형태* 로 담아 두는 자리.
+     *
+     * [isConfigured] 는 평범한 Boolean 이라, 배너가 이 값을 읽고 "아직 설정 전" 이라 판단해
+     * 빈 칸을 그리면 **설정이 나중에 끝나도 스스로 다시 그려지지 않는다** — 빈 칸으로 굳는다.
+     * 그래서 화면용으로는 이 자리를 따로 두고, [isConfiguredForCompose] 로 읽게 한다.
+     */
+    private val configuredRevision = mutableIntStateOf(0)
+
     /** configure 가 한 번 이상 호출되었는지 (BannerAdView / NativeAdView 가 placeholder 모드 판별에 사용). */
     public val isConfigured: Boolean
         get() = initializedFlag
+
+    /**
+     * 화면 (Composable) 이 읽는 설정 완료 여부.
+     *
+     * 이 값을 읽은 화면은 configure 가 끝나는 순간 스스로 다시 그려진다.
+     * 앱이 configure 를 뒷실에서 부르거나 화면보다 늦게 불러도 배너가 빈 칸으로 굳지 않는다.
+     */
+    internal val isConfiguredForCompose: Boolean
+        get() = configuredRevision.intValue > 0
 
     /** 전면 광고가 적재된 상태인지 — 디버그용. (기본 자리) */
     public val isInterstitialReady: Boolean
@@ -124,10 +145,16 @@ public object IndieKitAds {
      * 광고 모듈을 처음 설정한다.
      *
      * 동작
-     *  1. 광고 ID 보관 (자리 이름 → 출시 ID 묶음).
-     *  2. MobileAds.initialize 호출 (AdMob SDK 시작).
-     *  3. 전면 / 리워드 광고 미리 적재 (preload) — 기본 자리 + 등록한 모든 자리.
-     *  4. `requestConsent` 가 true 이면 UMP 동의창 흐름 시작 (EEA 사용자에 한해 동의창 노출).
+     *  1. 광고 ID 보관 (자리 이름 → 출시 ID 묶음). 부른 실에서 곧바로 끝난다.
+     *  2. `requestConsent` 가 true 이면 UMP 동의창 흐름 예약 (EEA 사용자에 한해 동의창 노출).
+     *  3. MobileAds.initialize 호출 (AdMob SDK 시작) — **뒷실에서**.
+     *  4. SDK 준비가 끝나면 전면 / 리워드 광고 미리 적재 (preload) — 앱이 등록한 자리만, 화면 그리는 실에서.
+     *
+     * 실 (스레드) 규칙
+     *  - 이 함수는 **화면 그리는 실에서 그대로 불러도 된다.** 오래 걸리는 일 (SDK 시작) 은
+     *    이 안에서 스스로 뒷실로 비켜 간다. 앱이 따로 실을 만들 필요가 없다.
+     *  - 반대로 앱이 이 함수를 뒷실에서 부르면 동의창 예약이 첫 화면보다 늦게 걸릴 수 있다.
+     *    Application.onCreate 에서 그냥 부르는 것이 가장 안전하다.
      *
      * @param context Application context. (Application 클래스의 this 를 권장 — Activity 는 onDestroy 시 누수 위험.)
      * @param bannerAdUnitIDs 자리 이름 → 배너 광고 ID 묶음. 자리 이름을 안 넘기는 기본 배너는
@@ -157,30 +184,62 @@ public object IndieKitAds {
         initializedFlag = true
         configureLock.unlock()
 
+        // 화면이 지켜보는 자리도 같이 올린다 — 이미 그려진 배너가 스스로 다시 그려진다.
+        configuredRevision.intValue += 1
+
         if (alreadyConfigured) {
             IKLogger.ads.debug("IndieKitAds.configure 재호출 — 광고 ID 만 갱신")
             return
         }
 
-        // SDK 시작 호출.
-        MobileAds.initialize(context.applicationContext) {
-            IKLogger.ads.info("MobileAds.initialize 완료")
-            // SDK 준비 완료 후 미리 적재 — 기본 자리 + 등록한 모든 자리.
-            val appCtx = context.applicationContext
-            InterstitialAdLoader.loader(null).preload(appCtx)
-            interstitialAdUnitIDs.keys.forEach { placement ->
-                InterstitialAdLoader.loader(placement).preload(appCtx)
-            }
-            RewardedAdLoader.loader(null).preload(appCtx)
-            rewardedAdUnitIDs.keys.forEach { placement ->
-                RewardedAdLoader.loader(placement).preload(appCtx)
-            }
-        }
+        val appCtx = context.applicationContext
 
+        // ── 1. 동의창 예약을 먼저 건다 ──────────────────────────────────────────
+        // 이 부름이 하는 일은 "첫 Activity 가 만들어지면 알려 달라" 는 예약 한 줄이라
+        // 화면을 붙잡지 않는다. 그런데 **반드시 SDK 시작보다 앞** 이어야 한다.
+        // 뒤에 두면 (예전 짜임) SDK 시작이 오래 걸리는 만큼 예약이 늦게 걸려,
+        // 첫 Activity 가 이미 만들어진 뒤가 될 수 있다. 화면이 하나뿐인 앱에서는
+        // 알려 줄 Activity 가 다시 안 생겨 동의 절차가 통째로 안 돈다 — 유럽에서는 법 위반이다.
         if (requestConsent) {
             // configure 시점이 Application.onCreate 라면 activity 가 null. 첫 Activity 시점에
             // 사용자가 직접 requestConsentForm(activity) 호출하거나, 아래 ActivityLifecycleCallbacks 자동 흐름 사용.
             tryAutoRequestConsent(context)
+        }
+
+        // ── 2. SDK 시작은 뒷실에서 ─────────────────────────────────────────────
+        // MobileAds.initialize 는 Google Play 서비스에 붙고 광고 설정을 그물 너머에서 받아온다.
+        // 특히 깔고 나서 첫 실행에서는 수백 밀리초 이상 걸린다. 화면 그리는 실에서 부르면
+        // 첫 화면을 그리지 못한 채 폰이 "응답 없음" 으로 앱을 끈다.
+        // (매니페스트 OPTIMIZE_INITIALIZATION 표시는 SDK 24.0.0 부터 이미 기본으로 켜져 있지만,
+        //  구글 설명대로 시작 일의 *일부* 만 옮길 뿐이라 이 뒷실이 여전히 필요하다.)
+        // 출처: https://developers.google.com/admob/android/quick-start
+        //
+        // 코루틴 대신 Thread 를 쓰는 까닭: 이 모듈은 kotlinx-coroutines 를 자기 의존성으로
+        // 선언하지 않는다 (Compose 가 딸려 오는 것에 얹혀 있을 뿐). 한 번 쓰고 끝나는 일에
+        // 남의 짐을 기대지 않는다.
+        Thread({
+            MobileAds.initialize(appCtx) {
+                IKLogger.ads.info("MobileAds.initialize 완료")
+                // 광고를 불러오는 일은 화면 그리는 실에서 한다 (구글 광고 묶음 규칙).
+                // 위에서 뒷실로 옮겼으므로 여기서 화면 그리는 실로 되돌린다.
+                Handler(Looper.getMainLooper()).post { preloadRegisteredPlacements(appCtx) }
+            }
+        }, "indie-kit-ads-init").start()
+    }
+
+    /**
+     * 전면 / 리워드 광고를 미리 적재한다 — **앱이 실제로 등록한 자리만.**
+     *
+     * 등록 안 한 기본 자리까지 부르지 않는 까닭: 시험용 (디버그) 빌드에서는 [AdUnitID.resolve] 가
+     * 등록 여부와 상관없이 늘 구글 시험용 번호를 채운다. 그래서 예전 짜임에서는 앱이 쓰지도 않는
+     * 전면 광고를 켤 때마다 불러왔다 — 앱 켜는 순간에 쓸데없는 그물 요청이 얹혔다.
+     */
+    private fun preloadRegisteredPlacements(appCtx: Context) {
+        interstitialAdUnitIDs.keys.forEach { placement ->
+            InterstitialAdLoader.loader(placement).preload(appCtx)
+        }
+        rewardedAdUnitIDs.keys.forEach { placement ->
+            RewardedAdLoader.loader(placement).preload(appCtx)
         }
     }
 

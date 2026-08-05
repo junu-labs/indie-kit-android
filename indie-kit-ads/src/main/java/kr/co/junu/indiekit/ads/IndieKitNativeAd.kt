@@ -77,20 +77,28 @@ import kr.co.junu.indiekit.core.IKLogger
 public fun NativeAdView(modifier: Modifier = Modifier, placement: String? = null) {
     val context = LocalContext.current
     var nativeAd by remember { mutableStateOf<NativeAd?>(null) }
-    var isDisposed by remember { mutableStateOf(false) }
 
-    DisposableEffect(placement) {
-        if (IndieKitAds.isConfigured) {
+    // 화면 몸통에서 읽어야 configure 완료를 지켜볼 수 있다 (DisposableEffect 안에서 읽으면 못 지켜본다).
+    // 아래 DisposableEffect 의 열쇠로도 넘겨, 설정이 나중에 끝나면 그때 광고를 불러오게 한다.
+    val configured = IndieKitAds.isConfiguredForCompose
+
+    DisposableEffect(placement, configured) {
+        // "이 자리는 이미 걷혔다" 는 표식. **이 효과 한 번에만 딸린다.**
+        // 화면 전체가 기억하는 값으로 두면, 자리 이름이나 설정 완료가 바뀌어 효과가 다시 돌 때
+        // 앞 효과가 켜 둔 표식이 그대로 남아 새로 불러온 광고까지 버려진다.
+        var disposed = false
+
+        if (configured) {
             loadNativeAd(context, placement) { ad ->
-                if (!isDisposed) {
-                    nativeAd = ad
-                } else {
+                if (disposed) {
                     ad.destroy()
+                } else {
+                    nativeAd = ad
                 }
             }
         }
         onDispose {
-            isDisposed = true
+            disposed = true
             nativeAd?.destroy()
             nativeAd = null
         }

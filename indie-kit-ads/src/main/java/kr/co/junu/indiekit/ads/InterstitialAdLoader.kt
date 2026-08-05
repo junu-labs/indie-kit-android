@@ -42,9 +42,22 @@ internal class InterstitialAdLoader private constructor(
         /** 자리 이름 → 적재기 보관소. */
         private val loaders = java.util.concurrent.ConcurrentHashMap<String, InterstitialAdLoader>()
 
-        /** 자리 이름에 해당하는 적재기를 꺼낸다. 없으면 만들어 보관. */
-        fun loader(placement: String?): InterstitialAdLoader =
-            loaders.getOrPut(placement ?: DEFAULT_KEY) { InterstitialAdLoader(placement) }
+        /**
+         * 자리 이름에 해당하는 적재기를 꺼낸다. 없으면 만들어 보관.
+         *
+         * 자리 이름을 안 넘긴 것 (null) 과 [IndieKitAds.DEFAULT_PLACEMENT] ("default") 은
+         * **같은 자리** 라 한 칸을 같이 쓴다. 칸을 나누면 광고 번호를 고르는 자리가 둘 다
+         * "default" 키를 보므로, 같은 광고 번호로 요청을 두 번 보내고 그중 하나는
+         * 화면에서 부를 길이 없어 영영 안 쓰인다.
+         */
+        fun loader(placement: String?): InterstitialAdLoader {
+            val key = if (placement == null || placement == IndieKitAds.DEFAULT_PLACEMENT) {
+                DEFAULT_KEY
+            } else {
+                placement
+            }
+            return loaders.getOrPut(key) { InterstitialAdLoader(placement) }
+        }
     }
 
     /** 적재된 전면 광고 인스턴스. */
