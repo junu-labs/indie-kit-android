@@ -137,4 +137,26 @@ class IndieKitAdsTests {
         assertFalse(IndieKitAds.isInterstitialReady(placement = "home"))
         assertFalse(IndieKitAds.isRewardedReady(placement = "home"))
     }
+
+    /**
+     * 시험용 나라 설정 그릇 — 기본값 (기기 번호 목록 비움) / 동등성 / 나라 두 갈래.
+     * 실제 동의창이 뜨는지는 단위 테스트로 못 본다 (UMP 는 네트워크 + Activity 의존)
+     * — 데모 앱에서 consentTestSettings = EEA 로 통합 검증.
+     */
+    @Test
+    fun `ConsentTestSettings holds geography and device ids`() {
+        val eea = ConsentTestSettings(geography = ConsentTestGeography.EEA)
+        assertEquals(ConsentTestGeography.EEA, eea.geography)
+        assertTrue("기기 번호 목록 기본값은 비어 있어야 함", eea.testDeviceHashedIds.isEmpty())
+
+        val same = ConsentTestSettings(geography = ConsentTestGeography.EEA)
+        assertEquals(eea, same)
+
+        val notEea = ConsentTestSettings(
+            geography = ConsentTestGeography.NOT_EEA,
+            testDeviceHashedIds = listOf("ABCD1234")
+        )
+        assertNotEquals(eea, notEea)
+        assertEquals(listOf("ABCD1234"), notEea.testDeviceHashedIds)
+    }
 }

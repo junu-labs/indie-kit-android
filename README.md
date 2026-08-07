@@ -6,7 +6,7 @@
 
 ## 들어 있는 것
 
-**6개 모듈은 한 묶음이고 버전도 하나다.** JitPack 은 저장소 전체를 git 태그 하나로 빌드하므로, 모듈마다 버전이 따로 있지 않다. 어떤 모듈을 받든 **모두 같은 태그 (지금은 `v0.9.3`)** 로 받는다. 아래 "상태" 칸은 버전이 아니라 *검증이 어디까지 됐는가* 다.
+**6개 모듈은 한 묶음이고 버전도 하나다.** JitPack 은 저장소 전체를 git 태그 하나로 빌드하므로, 모듈마다 버전이 따로 있지 않다. 어떤 모듈을 받든 **모두 같은 태그 (지금은 `v0.9.4`)** 로 받는다. 아래 "상태" 칸은 버전이 아니라 *검증이 어디까지 됐는가* 다.
 
 | 모듈 | 무엇을 해 주는가 | 단계 | 상태 |
 |---|---|---|---|
@@ -19,9 +19,9 @@
 
 자세한 단계는 `PLAN.md`, 모듈별 변경 이력은 `CHANGELOG.md` 참고.
 
-현재는 **6개 모듈 모두 작성 완료, 최신 태그 `v0.9.3`**. 광고 (`indie-kit-ads`) 와 푸시 (`indie-kit-push`) 는 실기기 검증까지 끝났고, 나머지는 데모 앱 검증 단계다. 다음은 SolTi 통합 검증.
+현재는 **6개 모듈 모두 작성 완료, 최신 태그 `v0.9.4`**. 광고 (`indie-kit-ads`) 와 푸시 (`indie-kit-push`) 는 실기기 검증까지 끝났고, 나머지는 데모 앱 검증 단계다. 다음은 SolTi 통합 검증.
 
-## 붙이려면 앱이 갖춰야 할 것 (`v0.9.3` 기준)
+## 붙이려면 앱이 갖춰야 할 것 (`v0.9.4` 기준)
 
 **앱의 사양이 아래보다 낮으면 붙지 않는다.** 모듈을 올리기 전에 이 표부터 맞춘다.
 
@@ -125,11 +125,11 @@ dependencyResolutionManagement {
 앱 모듈 (`app/build.gradle.kts`) 의 dependencies 에 필요한 모듈만 추가:
 
 ```kotlin
-implementation("com.github.junu-labs.indie-kit-android:indie-kit-analytics:v0.9.3")
-implementation("com.github.junu-labs.indie-kit-android:indie-kit-ads:v0.9.3")
+implementation("com.github.junu-labs.indie-kit-android:indie-kit-analytics:v0.9.4")
+implementation("com.github.junu-labs.indie-kit-android:indie-kit-ads:v0.9.4")
 ```
 
-**여러 모듈을 쓸 땐 버전을 반드시 똑같이 맞춘다** (위처럼 둘 다 `v0.9.3`). 모듈들은 속에서 `indie-kit-core` 를 함께 쓰는데, 버전을 섞으면 (`analytics:v0.1.0` + `ads:v0.7.1` 식) core 가 두 벌 딸려와 충돌할 수 있다.
+**여러 모듈을 쓸 땐 버전을 반드시 똑같이 맞춘다** (위처럼 둘 다 `v0.9.4`). 모듈들은 속에서 `indie-kit-core` 를 함께 쓰는데, 버전을 섞으면 (`analytics:v0.1.0` + `ads:v0.7.1` 식) core 가 두 벌 딸려와 충돌할 수 있다.
 
 광고만 필요한 앱은 광고 모듈만 추가 → 나머지 외부 라이브러리 (Firebase, 카카오, 구글, OkHttp, Compose) 가 빌드에 안 끼게 한다.
 
@@ -309,6 +309,7 @@ export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
 
 | 버전 | 날짜 | 무엇을 했나 |
 |---|---|---|
+| `v0.9.4` | 2026-08-07 | 광고 (`indie-kit-ads`) 유럽 동의 절차 수리 + 동의창 시험 길. configure 를 화면 뒤로 미룬 앱 (TouchCart) 에서 동의 절차가 통째로 안 돌던 문제 — 이제 iOS 자매와 같은 원리로 "지금 떠 있는 화면" 을 스스로 찾아 진행한다 (앱 시작 순간 심어지는 추적자, 앱 쪽 코드 불필요). Application.onCreate 에서 부르는 기존 앱들은 동작 변화 없음. 더불어 시험용 나라 강제 (`consentTestSettings` — EEA / NOT_EEA) 와 동의 기록 초기화 (`resetConsentForTesting`) 를 열었다 — 둘 다 디버그 빌드에서만 동작. 전체 빌드·테스트 통과. |
 | `v0.9.3` | 2026-08-05 | 광고 (`indie-kit-ads`) 시작 경로 수리 — 앱 켤 때 화면이 멎던 문제. `MobileAds.initialize` 를 모듈이 스스로 뒷실로 비켜 보내고 (앱은 예전처럼 `configure(this)` 만 부르면 된다), 동의창 예약을 SDK 시작 **앞** 으로 옮겨 예약이 첫 화면보다 늦게 걸리지 않게 했다. 더불어 같은 광고 번호를 두 번 부르던 적재기 칸 나눔, 등록 안 한 기본 자리 미리 부르기, 배너 / Native 가 빈 칸으로 굳던 문제를 함께 고쳤다. 전체 빌드·테스트 통과. |
 | `v0.9.2` | 2026-07-24 | 결제 (`indie-kit-billing`) 안정화 — SolTi 통합 검증에서 발견된 결함 수정 (iOS 0.7.7 과 대칭). 실패한 조회가 이미 확보한 권한을 지우던 문제 (실패와 진짜 없음 구분, 두 조회 모두 성공할 때만 교체), 복원이 뮤텍스를 우회하던 경쟁 쓰기, 최근 구매 스티키 (결제 즉시 반영 + 재확인이 못 지움), 연결 끊김 백오프 재연결, acknowledge 유한 재시도. 전체 빌드·테스트 통과. |
 | `v0.9.1` | 2026-07-23 | Android Studio 업데이트 후 툴체인 마저 올림. AGP 9.2.1→9.3.0, compileSdk 36→37, coreKtx 1.18.0→1.19.0. **이 태그를 받는 앱은 compileSdk 37 로 컴파일해야 한다** (Kotlin 2.4 이상 요구는 v0.9.0 과 동일). 전체 빌드·테스트 통과. |

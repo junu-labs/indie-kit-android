@@ -18,7 +18,9 @@ package kr.co.junu.indiekit.ads
 
 import android.app.Activity
 import android.content.Context
+import android.content.pm.ApplicationInfo
 import kr.co.junu.indiekit.core.IKLogger
+import com.google.android.ump.ConsentDebugSettings
 import com.google.android.ump.ConsentInformation
 import com.google.android.ump.ConsentRequestParameters
 import com.google.android.ump.UserMessagingPlatform
@@ -33,12 +35,49 @@ internal object UMPCoordinator {
      * @param activity 동의창을 띄울 수 있는 Activity. configure 시점엔 onCreate 후가 자연스럽지만,
      *                 Application.onCreate 에서 호출하면 Activity 가 없어 form 표시는 다음 Activity 시점으로 미뤄진다.
      *                 안드로이드 UMP 는 form 표시에 Activity 가 필수라, configure 의 자동 호출은
-     *                 IndieKitAds 가 ActivityLifecycleCallbacks 로 첫 Activity 가 잡히는 시점까지 대기한다.
+     *                 IndieKitAds 가 "지금 떠 있는 화면" (CurrentActivityTracker) 또는
+     *                 다음 화면이 잡히는 시점을 골라 이 함수를 부른다.
+     * @param testSettings 시험용 나라 강제 설정. null 이면 실제 위치대로 동작.
+     *                     디버그 빌드에서만 반영 — 출시 빌드에서는 무시하고 경고만 남긴다.
      */
-    fun requestConsentInfoUpdate(context: Context, activity: Activity?) {
-        val params = ConsentRequestParameters.Builder()
+    fun requestConsentInfoUpdate(
+        context: Context,
+        activity: Activity?,
+        testSettings: ConsentTestSettings? = null
+    ) {
+        val paramsBuilder = ConsentRequestParameters.Builder()
             .setTagForUnderAgeOfConsent(false)
-            .build()
+
+        // 시험용 나라 강제 — 디버그 빌드에서만. 출시 빌드에 새어 나가면 실사용자의
+        // 동의 판정이 뒤틀리므로 모듈이 여기서 한 번 더 걸러 준다.
+        if (testSettings != null) {
+            if (isDebuggableBuild(context)) {
+                val debugSettings = ConsentDebugSettings.Builder(context)
+                    .setDebugGeography(
+                        when (testSettings.geography) {
+                            ConsentTestGeography.EEA ->
+                                ConsentDebugSettings.DebugGeography.DEBUG_GEOGRAPHY_EEA
+                            // NOT_EEA 상수는 낡은 이름 (deprecated) — 후속인 OTHER 를 쓴다.
+                            // 뜻은 같다: 유럽도, 미국 규제 주도 아닌 "그 밖의 지역".
+                            ConsentTestGeography.NOT_EEA ->
+                                ConsentDebugSettings.DebugGeography.DEBUG_GEOGRAPHY_OTHER
+                        }
+                    )
+                    .apply {
+                        // 에뮬레이터는 자동 인정 — 실기기 시험 때만 번호가 필요하다.
+                        testSettings.testDeviceHashedIds.forEach { addTestDeviceHashedId(it) }
+                    }
+                    .build()
+                paramsBuilder.setConsentDebugSettings(debugSettings)
+                IKLogger.ads.info("UMP 시험용 나라 강제: ${testSettings.geography}")
+            } else {
+                IKLogger.ads.warning(
+                    "UMP 시험용 나라 설정은 출시 빌드에서 무시됩니다 — 출시 전에 configure 에서 빼 주세요."
+                )
+            }
+        }
+
+        val params = paramsBuilder.build()
 
         val info = UserMessagingPlatform.getConsentInformation(context.applicationContext)
         info.requestConsentInfoUpdate(
@@ -104,4 +143,23 @@ internal object UMPCoordinator {
             "configure 시점이 Application.onCreate 라면 첫 Activity 가 잡힌 후 다시 호출하세요."
         )
     }
+
+    /**
+     * 저장된 동의 답을 지운다 — **시험용.** 동의창은 한 번 답하면 다음 실행부터 안 뜨므로,
+     * 뜨는 모습을 다시 보려면 이걸 부르고 앱을 재시작한다.
+     *
+     * 출시 빌드에서는 무시 — 실사용자의 동의 기록을 지우는 사고를 막는다.
+     */
+    fun resetForTesting(context: Context) {
+        if (!isDebuggableBuild(context)) {
+            IKLogger.ads.warning("UMP 동의 기록 초기화는 시험용 — 출시 빌드에서는 무시합니다.")
+            return
+        }
+        UserMessagingPlatform.getConsentInformation(context.applicationContext).reset()
+        IKLogger.ads.info("UMP 동의 기록 초기화 완료 — 앱을 재시작하면 동의창이 다시 뜹니다.")
+    }
+
+    /** 디버그 빌드인지 (AdUnitID.resolve 와 같은 기준 — 사용처 앱의 debuggable 표식). */
+    private fun isDebuggableBuild(context: Context): Boolean =
+        (context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
 }

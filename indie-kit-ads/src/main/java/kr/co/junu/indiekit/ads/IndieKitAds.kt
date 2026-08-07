@@ -99,6 +99,10 @@ public object IndieKitAds {
     private var rewardedAdUnitIDs: Map<String, AdUnitID> = emptyMap()
     private var nativeAdUnitIDs: Map<String, AdUnitID> = emptyMap()
 
+    /** 시험용 나라 강제 설정 (configure 에서 보관). null 이면 실제 위치대로. 디버그 빌드에서만 반영. */
+    @Volatile
+    private var consentTestSettings: ConsentTestSettings? = null
+
     /**
      * configure 가 끝난 것을 *화면이 지켜볼 수 있는 형태* 로 담아 두는 자리.
      *
@@ -153,8 +157,11 @@ public object IndieKitAds {
      * 실 (스레드) 규칙
      *  - 이 함수는 **화면 그리는 실에서 그대로 불러도 된다.** 오래 걸리는 일 (SDK 시작) 은
      *    이 안에서 스스로 뒷실로 비켜 간다. 앱이 따로 실을 만들 필요가 없다.
-     *  - 반대로 앱이 이 함수를 뒷실에서 부르면 동의창 예약이 첫 화면보다 늦게 걸릴 수 있다.
-     *    Application.onCreate 에서 그냥 부르는 것이 가장 안전하다.
+     *
+     * 부르는 시점
+     *  - Application.onCreate 가 기본. 하지만 **화면이 뜬 뒤로 미뤄 불러도 동의 절차는
+     *    빠지지 않는다** — 모듈이 "지금 떠 있는 화면" 을 스스로 찾아 그 자리에서 진행한다.
+     *    (첫 안내가 동의창에 덮이지 않게 configure 를 안내 뒤로 미루는 앱도 안전.)
      *
      * @param context Application context. (Application 클래스의 this 를 권장 — Activity 는 onDestroy 시 누수 위험.)
      * @param bannerAdUnitIDs 자리 이름 → 배너 광고 ID 묶음. 자리 이름을 안 넘기는 기본 배너는
@@ -164,7 +171,12 @@ public object IndieKitAds {
      * @param rewardedAdUnitIDs 자리 이름 → 리워드 광고 ID 묶음.
      * @param nativeAdUnitIDs 자리 이름 → Native 광고 ID 묶음.
      * @param requestConsent true 면 UMP 동의창 자동 시작. EEA 외 사용자엔 영향 없음.
-     *                       Application.onCreate 에서 호출하면 Activity 가 없어 form 표시는 첫 Activity 시점으로 미뤄진다.
+     *                       Application.onCreate 에서 호출하면 첫 화면이 잡히는 시점에,
+     *                       화면이 뜬 *뒤* 에 호출하면 (첫 안내를 먼저 보여 주고 미룬 경우 등)
+     *                       지금 떠 있는 화면으로 즉시 동의 절차가 돈다.
+     * @param consentTestSettings 시험용 나라 강제 설정 — 유럽 동의창이 뜨는 모습을
+     *                            에뮬레이터 / 시험 기기에서 확인할 때만 넘긴다.
+     *                            디버그 빌드에서만 반영, 출시 빌드에서는 무시 (경고 로그).
      */
     public fun configure(
         context: Context,
@@ -172,7 +184,8 @@ public object IndieKitAds {
         interstitialAdUnitIDs: Map<String, AdUnitID> = emptyMap(),
         rewardedAdUnitIDs: Map<String, AdUnitID> = emptyMap(),
         nativeAdUnitIDs: Map<String, AdUnitID> = emptyMap(),
-        requestConsent: Boolean = true
+        requestConsent: Boolean = true,
+        consentTestSettings: ConsentTestSettings? = null
     ) {
         configureLock.lock()
         val alreadyConfigured = initializedFlag
@@ -181,6 +194,7 @@ public object IndieKitAds {
         this.interstitialAdUnitIDs = interstitialAdUnitIDs
         this.rewardedAdUnitIDs = rewardedAdUnitIDs
         this.nativeAdUnitIDs = nativeAdUnitIDs
+        this.consentTestSettings = consentTestSettings
         initializedFlag = true
         configureLock.unlock()
 
@@ -194,15 +208,12 @@ public object IndieKitAds {
 
         val appCtx = context.applicationContext
 
-        // ── 1. 동의창 예약을 먼저 건다 ──────────────────────────────────────────
-        // 이 부름이 하는 일은 "첫 Activity 가 만들어지면 알려 달라" 는 예약 한 줄이라
-        // 화면을 붙잡지 않는다. 그런데 **반드시 SDK 시작보다 앞** 이어야 한다.
-        // 뒤에 두면 (예전 짜임) SDK 시작이 오래 걸리는 만큼 예약이 늦게 걸려,
-        // 첫 Activity 가 이미 만들어진 뒤가 될 수 있다. 화면이 하나뿐인 앱에서는
-        // 알려 줄 Activity 가 다시 안 생겨 동의 절차가 통째로 안 돈다 — 유럽에서는 법 위반이다.
+        // ── 1. 동의 절차를 먼저 건다 ──────────────────────────────────────────
+        // 화면이 이미 떠 있으면 그 화면으로 바로, 아직 없으면 첫 화면이 잡히는 순간
+        // 진행한다 (tryAutoRequestConsent 안에서 갈라짐). 어느 쪽이든 오래 걸리는 일이
+        // 아니라 화면을 붙잡지 않는다. 그리고 **반드시 SDK 시작보다 앞** 이어야 한다 —
+        // 동의 판정 전에 광고 요청이 먼저 나가는 틈을 줄인다.
         if (requestConsent) {
-            // configure 시점이 Application.onCreate 라면 activity 가 null. 첫 Activity 시점에
-            // 사용자가 직접 requestConsentForm(activity) 호출하거나, 아래 ActivityLifecycleCallbacks 자동 흐름 사용.
             tryAutoRequestConsent(context)
         }
 
@@ -244,7 +255,22 @@ public object IndieKitAds {
     }
 
     /**
-     * Application 이 주입되면 첫 Activity 가 잡히는 시점에 자동 동의 흐름을 돌린다.
+     * 자동 동의 흐름을 돌린다 — configure 시점과 무관하게 동작해야 한다.
+     *
+     * 두 갈래:
+     *  1. **이미 떠 있는 화면이 있으면** (앱이 configure 를 첫 안내 뒤로 미룬 경우 등)
+     *     그 화면으로 *지금 바로* 진행한다. "지금 화면" 은 CurrentActivityTracker 가 알고 있다
+     *     — 추적자는 앱 시작 순간 (어떤 화면보다 먼저) 자동으로 심어진다.
+     *  2. **아직 화면이 없으면** (Application.onCreate 에서 부른 보통 경우) 첫 화면이
+     *     잡히는 순간 한 번 진행하고 예약을 거둔다.
+     *
+     * 예전 짜임은 2번만 있었다 — "화면이 새로 만들어지는 순간" 만 듣고 바로 예약을
+     * 거뒀기 때문에, configure 가 화면보다 늦으면 그 실행에서 동의 절차가 통째로
+     * 안 돌았다 (화면이 하나뿐이면 기회가 다시 안 옴 — 유럽에서는 법 위반).
+     *
+     * 판단은 화면 그리는 실 (main) 에 모아 한다 — configure 를 뒷실에서 불러도
+     * "지금 화면" 읽기와 예약 걸기가 서로 엇갈리지 않는다.
+     *
      * 다른 형태의 context (Service 등) 가 들어오면 자동 흐름은 건너뜀 — 사용자가 직접 requestConsentForm 호출.
      */
     private fun tryAutoRequestConsent(context: Context) {
@@ -252,22 +278,39 @@ public object IndieKitAds {
             IKLogger.ads.debug("자동 UMP 동의 흐름 건너뜀 — Application context 가 아님.")
             return
         }
-        app.registerActivityLifecycleCallbacks(object : Application.ActivityLifecycleCallbacks {
-            override fun onActivityCreated(
-                activity: Activity,
-                savedInstanceState: android.os.Bundle?
-            ) {
-                app.unregisterActivityLifecycleCallbacks(this)
-                UMPCoordinator.requestConsentInfoUpdate(app, activity)
-            }
 
-            override fun onActivityStarted(activity: Activity) {}
-            override fun onActivityResumed(activity: Activity) {}
-            override fun onActivityPaused(activity: Activity) {}
-            override fun onActivityStopped(activity: Activity) {}
-            override fun onActivitySaveInstanceState(activity: Activity, outState: android.os.Bundle) {}
-            override fun onActivityDestroyed(activity: Activity) {}
-        })
+        // 추적자가 자동으로 안 심긴 별난 환경 대비 — 이미 심겼으면 아무 일 안 함.
+        CurrentActivityTracker.install(app)
+
+        Handler(Looper.getMainLooper()).post {
+            val activityNow = CurrentActivityTracker.current
+            if (activityNow != null) {
+                // 갈래 1 — 화면이 이미 있다: 지금 바로 진행.
+                UMPCoordinator.requestConsentInfoUpdate(app, activityNow, consentTestSettings)
+            } else {
+                // 갈래 2 — 화면이 아직 없다: 첫 화면이 잡히는 순간 한 번 진행.
+                app.registerActivityLifecycleCallbacks(object : Application.ActivityLifecycleCallbacks {
+                    override fun onActivityCreated(
+                        activity: Activity,
+                        savedInstanceState: android.os.Bundle?
+                    ) = fire(activity)
+
+                    // 만들어짐 신호를 어떤 이유로든 놓쳐도 (추적 공백 등) 다음 신호에서 잡는다.
+                    override fun onActivityStarted(activity: Activity) = fire(activity)
+                    override fun onActivityResumed(activity: Activity) = fire(activity)
+
+                    private fun fire(activity: Activity) {
+                        app.unregisterActivityLifecycleCallbacks(this)
+                        UMPCoordinator.requestConsentInfoUpdate(app, activity, consentTestSettings)
+                    }
+
+                    override fun onActivityPaused(activity: Activity) {}
+                    override fun onActivityStopped(activity: Activity) {}
+                    override fun onActivitySaveInstanceState(activity: Activity, outState: android.os.Bundle) {}
+                    override fun onActivityDestroyed(activity: Activity) {}
+                })
+            }
+        }
     }
 
     // ────────────────────────────────────────────────────────────────────────
@@ -322,6 +365,20 @@ public object IndieKitAds {
      */
     public fun requestConsentForm(activity: Activity, onComplete: (Throwable?) -> Unit = {}) {
         UMPCoordinator.presentForm(activity, onComplete)
+    }
+
+    /**
+     * 저장된 동의 답을 지운다 — **시험용.**
+     *
+     * 동의창은 한 번 답하면 다음 실행부터 안 뜨므로, 뜨는 모습을 다시 확인하려면
+     * 이걸 부르고 앱을 재시작한다. `consentTestSettings` 와 짝으로 쓴다.
+     *
+     * 출시 빌드에서는 무시된다 (경고 로그) — 실사용자의 동의 기록을 지우는 사고 방지.
+     *
+     * @param context 아무 context. 내부에서 application context 로 바꿔 쓴다.
+     */
+    public fun resetConsentForTesting(context: Context) {
+        UMPCoordinator.resetForTesting(context)
     }
 
     // ────────────────────────────────────────────────────────────────────────
