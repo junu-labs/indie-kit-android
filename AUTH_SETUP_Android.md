@@ -2,7 +2,7 @@
 
 이 문서는 안드로이드 앱에 IndieKitAuth (Google + Kakao 로그인) 를 처음 붙일 때 필요한 콘솔 등록과 Gradle / 코드 설정을 한 자리에 모은 것이다. 데모 앱 (`Apps/IndieKitExample/indieKitDemo_Android/`) 검증에서 실제로 거친 흐름 그대로.
 
-자매 문서 — iOS 의 `~/Developer/JunuLabs/System/indie-kit-modules/indie-kit-ios/AUTH_SETUP.md`. 같은 단계 / 같은 진입점 이름.
+자매 문서 — iOS 의 `~/Developer/JunuLabs/Kit/modules/indie-kit-ios/AUTH_SETUP.md`. 같은 단계 / 같은 진입점 이름.
 
 ## 한눈에 보는 흐름
 
