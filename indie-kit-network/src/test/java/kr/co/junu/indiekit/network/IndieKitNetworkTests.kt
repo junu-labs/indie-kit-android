@@ -297,6 +297,94 @@ class IndieKitNetworkTests {
         val contentType: String = "application/json"
     )
 
+    // ────────────────────────────────────────────────────────────────────
+    // 앱 버전 확인 (2026-10 — 앱마다 짜던 AppVersionChecker 를 모듈로). iOS 자매와 같은 시나리오.
+    // ────────────────────────────────────────────────────────────────────
+
+    @Test
+    fun `버전 비교는 숫자만 보고 숫자 아닌 칸이면 비교하지 않는다`() {
+        assertTrue(AppVersionCheck.isNewer("1.2.1", "1.2.0"))
+        assertTrue("글자 비교가 아니라 숫자 비교", AppVersionCheck.isNewer("1.10", "1.9"))
+        assertTrue(AppVersionCheck.isNewer("2", "1.9.9"))
+        assertFalse("모자란 칸은 0", AppVersionCheck.isNewer("1.2", "1.2.0"))
+        assertFalse(AppVersionCheck.isNewer("1.2.0", "1.2.0"))
+        assertFalse(AppVersionCheck.isNewer("1.1.9", "1.2.0"))
+        assertTrue(AppVersionCheck.isNewer("1.3.0-beta", "1.2.0+45"))
+        assertFalse(AppVersionCheck.isNewer("1.3.x", "1.2.0"))
+        assertFalse(AppVersionCheck.isNewer("", "1.0"))
+        assertEquals(listOf(1, 2, 3), AppVersionCheck.parse("1.2.3-rc1+7"))
+        assertEquals(null, AppVersionCheck.parse("1..2"))
+    }
+
+    @Test
+    fun `창 고르기 - 강제는 매번 선택은 서버 버전마다 한 번`() {
+        val forced = AppVersionInfo(version = "2.0.0", forceUpdate = true)
+        val optional = AppVersionInfo(version = "1.3.0", forceUpdate = false)
+
+        assertEquals(AppUpdatePrompt.FORCED, AppVersionCheck.decide(forced, "1.0.0", lastShownOptional = "2.0.0"))
+        assertEquals(AppUpdatePrompt.OPTIONAL, AppVersionCheck.decide(optional, "1.2.0", lastShownOptional = null))
+        assertEquals(null, AppVersionCheck.decide(optional, "1.2.0", lastShownOptional = "1.3.0"))
+        assertEquals(AppUpdatePrompt.OPTIONAL, AppVersionCheck.decide(optional, "1.2.0", lastShownOptional = "1.2.5"))
+        assertEquals("같은 버전이면 강제도 없음", null, AppVersionCheck.decide(forced, "2.0.0", lastShownOptional = null))
+    }
+
+    @Test
+    fun `버전 묻기 - POST 로 slug 와 ANDROID 를 보내고 답을 푼다`() = runBlocking {
+        val capturedMethod = AtomicReference<String>()
+        val capturedPath = AtomicReference<String>()
+        val capturedBody = AtomicReference<String>()
+        val net = IndieKitNetwork(
+            baseURL = "https://api.test",
+            client = fakeClient(
+                listOf(
+                    FakeResponse(
+                        statusCode = 200,
+                        bodyJson = """{"status":"SUCCESS","data":{"version":"1.3.0","force_update":true,"min":"x"}}"""
+                    )
+                ),
+                onRequest = { request ->
+                    capturedMethod.set(request.method)
+                    capturedPath.set(request.url.encodedPath)
+                    val buffer = okio.Buffer()
+                    request.body?.writeTo(buffer)
+                    capturedBody.set(buffer.readUtf8())
+                }
+            )
+        )
+
+        val info = AppVersionCheck.fetch("tapcounter", net)
+        assertEquals(AppVersionInfo(version = "1.3.0", forceUpdate = true), info)
+        assertEquals("POST", capturedMethod.get())
+        assertEquals("/compliance/app-version/", capturedPath.get())
+        assertTrue(capturedBody.get().contains("\"slug\":\"tapcounter\""))
+        assertTrue(capturedBody.get().contains("\"os_type\":\"ANDROID\""))
+    }
+
+    @Test
+    fun `버전 묻기 - SUCCESS 가 아니거나 실패하면 조용히 null`() = runBlocking {
+        val notSuccess = IndieKitNetwork(
+            baseURL = "https://api.test",
+            client = fakeClient(
+                listOf(FakeResponse(statusCode = 200, bodyJson = """{"status":"FAIL","data":{"version":"9.0.0","force_update":true}}"""))
+            )
+        )
+        assertEquals(null, AppVersionCheck.fetch("app", notSuccess))
+
+        val serverError = IndieKitNetwork(
+            baseURL = "https://api.test",
+            client = fakeClient(listOf(FakeResponse(statusCode = 500, bodyJson = """{"detail":"oops"}""")))
+        )
+        assertEquals(null, AppVersionCheck.fetch("app", serverError))
+    }
+
+    @Test
+    fun `스토어 주소 - 스토어 앱과 웹`() {
+        assertEquals(
+            "https://play.google.com/store/apps/details?id=kr.co.junu.tapcounter",
+            AppVersionCheck.webStoreUrl("kr.co.junu.tapcounter")
+        )
+    }
+
     /**
      * 응답 큐를 순서대로 돌려주는 가짜 OkHttpClient.
      *

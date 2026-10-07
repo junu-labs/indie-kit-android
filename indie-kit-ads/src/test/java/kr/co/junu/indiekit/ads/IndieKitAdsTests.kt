@@ -212,6 +212,76 @@ class IndieKitAdsTests {
         assertFalse(IndieKitAds.isRewardedReady(placement = "home"))
     }
 
+    // ── 유럽 동의를 받은 뒤에 광고 SDK 시작 (2026-10) ─────────────────────────
+
+    /** 동의 절차를 켠 앱은 UMP 가 허락하기 전에는 SDK 를 시작하지 않는다 (예전엔 나란히 시작했다). */
+    @Test
+    fun `ads start gate waits for consent`() {
+        val gate = AdsStartGate()
+        assertFalse(
+            "동의 전에 시작하면 동의 전 광고 요청이 나간다",
+            gate.tryStart(requestConsent = true, canRequestAds = false)
+        )
+        assertFalse(gate.isStarted)
+
+        assertTrue(gate.tryStart(requestConsent = true, canRequestAds = true))
+        assertTrue(gate.isStarted)
+    }
+
+    /** 시작은 한 번만 — "거는 순간 (지난 동의)" 과 "절차 끝" 두 번 허락이 와도 SDK 시작은 한 번. */
+    @Test
+    fun `ads start gate starts only once`() {
+        val gate = AdsStartGate()
+        assertTrue(gate.tryStart(requestConsent = true, canRequestAds = true))
+        assertFalse(gate.tryStart(requestConsent = true, canRequestAds = true))
+        assertFalse(gate.tryStart(requestConsent = false, canRequestAds = true))
+    }
+
+    /** 동의 절차를 끈 앱은 기다리지 않고 곧바로 시작한다 (예전과 같음). */
+    @Test
+    fun `ads start gate without consent starts immediately`() {
+        assertTrue(AdsStartGate().tryStart(requestConsent = false, canRequestAds = false))
+    }
+
+    /** configure 전에는 화면이 광고를 요청하지 않는다 (SDK 준비 전 = 빈 자리). */
+    @Test
+    fun `ads are not ready for compose before configure`() {
+        assertFalse(IndieKitAds.isAdsReadyForCompose)
+        assertFalse(IndieKitAds.isSdkReady)
+    }
+
+    // ── 배너 둘레 검은 띠 (2026-10) ──────────────────────────────────────────
+
+    /** 광고가 자리보다 작으면 광고 크기 그대로 가운데에 — 남는 곳은 그릇 (투명) 이라 앱 바탕색이 보인다. */
+    @Test
+    fun `banner smaller than slot is centered`() {
+        assertEquals(
+            "예전엔 AdView 가 자리 전체 (1080) 를 차지해 양옆이 검게 채워졌다",
+            BannerFrame(left = 120, top = 0, width = 840, height = 131),
+            BannerLayout.adFrame(adW = 840, adH = 131, containerW = 1080, containerH = 131)
+        )
+        assertEquals(
+            "위아래도 가운데",
+            BannerFrame(left = 0, top = 23, width = 1080, height = 85),
+            BannerLayout.adFrame(adW = 1080, adH = 85, containerW = 1080, containerH = 131)
+        )
+    }
+
+    /** 광고가 자리보다 크면 자리 안으로 줄여 잡는다 (468×60 시험 광고 등 — 옆 화면을 가리지 않게). */
+    @Test
+    fun `banner larger than slot is clamped`() {
+        assertEquals(
+            BannerFrame(0, 0, 1080, 131),
+            BannerLayout.adFrame(adW = 1229, adH = 158, containerW = 1080, containerH = 131)
+        )
+    }
+
+    /** 광고 크기를 아직 모르면 자리 전체. */
+    @Test
+    fun `banner unknown size fills slot`() {
+        assertEquals(BannerFrame(0, 0, 1080, 131), BannerLayout.adFrame(0, 0, 1080, 131))
+    }
+
     /**
      * 시험용 나라 설정 그릇 — 기본값 (기기 번호 목록 비움) / 동등성 / 나라 두 갈래.
      * 실제 동의창이 뜨는지는 단위 테스트로 못 본다 (UMP 는 네트워크 + Activity 의존)

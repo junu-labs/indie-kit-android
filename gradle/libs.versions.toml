@@ -23,6 +23,9 @@ mavenPublish = "0.37.0"
 firebaseBom = "34.16.0"
 
 # 2단계 추가 — AdMob (배너 / 전면 / 리워드 / Native) + UMP (유럽 광고 동의창) + Compose.
+# 판 고정 방식 (2026-10 결정): `+` 범위 없이 정확한 판 하나로 고정한다. 범위로 두면 같은 태그라도
+# 빌드한 날에 따라 다른 SDK 가 들어가 앱의 광고 동작이 말없이 바뀐다. 올릴 때는 이 줄을 바꾸고
+# CHANGELOG 에 까닭과 바뀐 점을 적는다 (module-dev 약속 5).
 playServicesAds = "25.4.0"
 userMessagingPlatform = "4.0.0"
 composeBom = "2026.06.01"
@@ -95,7 +98,7 @@ androidx-fragment = { group = "androidx.fragment", name = "fragment", version.re
 #  - okhttp: HTTP 본체. 사용처가 raw Request / Response 를 직접 다룰 수 있게 api 노출.
 #  - kotlinx-serialization-json: @Serializable 어노테이션을 사용처가 자기 자료에 붙여 쓰므로 api 노출.
 okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
-okhttp-mockwebserver = { group = "com.squareup.okhttp3", name = "mockwebserver", version.ref = "okhttp" }
+# (okhttp-mockwebserver 는 2026-10 정리에서 뺐다 — 시험은 자체 Interceptor 로 응답을 꾸며 쓰지 않았다.)
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinxSerialization" }
 kotlinx-coroutines-core = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-core", version.ref = "kotlinxCoroutines" }
 
@@ -121,7 +124,8 @@ androidx-activity = { group = "androidx.activity", name = "activity", version.re
 
 [plugins]
 android-library = { id = "com.android.library", version.ref = "agp" }
-kotlin-android  = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
+# (kotlin-android 플러그인은 2026-10 정리에서 뺐다 — 0.9.0 부터 AGP 내장 Kotlin 을 쓰고, Kotlin 판은
+#  루트 build.gradle.kts 의 buildscript classpath 가 고정한다. 어느 모듈도 이 alias 를 쓰지 않았다.)
 kotlin-compose  = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 # 3단계 — @Serializable 코드 생성 플러그인. Kotlin 컴파일러와 같은 버전으로 묶임.
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }

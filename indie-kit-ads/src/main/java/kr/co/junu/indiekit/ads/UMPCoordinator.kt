@@ -43,7 +43,8 @@ internal object UMPCoordinator {
     fun requestConsentInfoUpdate(
         context: Context,
         activity: Activity?,
-        testSettings: ConsentTestSettings? = null
+        testSettings: ConsentTestSettings? = null,
+        onFinished: () -> Unit = {}
     ) {
         val paramsBuilder = ConsentRequestParameters.Builder()
             .setTagForUnderAgeOfConsent(false)
@@ -80,19 +81,35 @@ internal object UMPCoordinator {
         val params = paramsBuilder.build()
 
         val info = UserMessagingPlatform.getConsentInformation(context.applicationContext)
+        if (activity == null) {
+            logActivityRequiredForUpdate()
+            onFinished()
+            return
+        }
         info.requestConsentInfoUpdate(
-            activity ?: return logActivityRequiredForUpdate(),
+            activity,
             params,
             {
                 if (info.isConsentFormAvailable) {
-                    loadAndShowFormIfRequired(activity, info)
+                    loadAndShowFormIfRequired(activity, info, onFinished)
+                } else {
+                    onFinished()
                 }
             },
             { formError ->
                 IKLogger.ads.warning("UMP 동의 정보 갱신 실패: ${formError.message}")
+                // 갱신에 실패해도 지난 실행에서 받은 동의가 있으면 그걸로 시작할 수 있다 (구글 예제와 같음).
+                onFinished()
             }
         )
     }
+
+    /**
+     * UMP 가 "광고를 요청해도 된다" 고 보는지. 지난 실행에서 받은 동의도 반영된다.
+     * 유럽 밖 사용자는 갱신 뒤 true, 유럽 사용자는 답을 받은 뒤 true.
+     */
+    fun canRequestAds(context: Context): Boolean =
+        UserMessagingPlatform.getConsentInformation(context.applicationContext).canRequestAds()
 
     /**
      * 사용자가 "광고 설정 변경" 등을 눌렀을 때.
@@ -125,15 +142,21 @@ internal object UMPCoordinator {
     // 내부 헬퍼
     // ────────────────────────────────────────────────────────────────────────
 
-    private fun loadAndShowFormIfRequired(activity: Activity, info: ConsentInformation) {
+    private fun loadAndShowFormIfRequired(
+        activity: Activity,
+        info: ConsentInformation,
+        onFinished: () -> Unit
+    ) {
         if (info.consentStatus != ConsentInformation.ConsentStatus.REQUIRED) {
             // EEA 외 사용자 또는 이미 동의 완료 — 동의창 표시 안 함.
+            onFinished()
             return
         }
         UserMessagingPlatform.loadAndShowConsentFormIfRequired(activity) { formError ->
             if (formError != null) {
                 IKLogger.ads.warning("UMP 동의창 자동 표시 실패: ${formError.message}")
             }
+            onFinished()
         }
     }
 

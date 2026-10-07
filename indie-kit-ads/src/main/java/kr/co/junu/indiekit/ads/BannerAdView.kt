@@ -19,6 +19,9 @@
  *    반영한다 (첫 폭은 바로 반영 — 첫 광고가 늦지 않게).
  *  - 광고 ID 는 `IndieKitAds.resolvedBannerAdUnitID(context)` 에서 자동 가져옴 (configure 결과 / 테스트 ID).
  *  - 광고 적재 / 표시 이벤트는 `AnalyticsBus` 로 흘려보내기 — 통계 모듈을 깐 앱이면 자동으로 Firebase 로 흘러감.
+ *  - 둘레 투명 (2026-10): AdView 는 받은 광고 크기만큼만, 자리 가운데에 둔다. 남는 곳은 투명이라
+ *    앱이 칠한 광고 자리 바탕색이 보인다 — 검은 띠 없음 (`BannerContainerLayout`, `BannerLayout`).
+ *  - 동의 먼저 (2026-10): 광고 SDK 가 유럽 동의 확인 뒤 시작될 때까지 광고를 요청하지 않는다.
  *
  * 사용 방법
  *  ```kotlin
@@ -37,6 +40,9 @@
 
 package kr.co.junu.indiekit.ads
 
+import android.graphics.Color
+import android.view.ViewGroup
+import android.widget.FrameLayout
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -49,6 +55,7 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
@@ -86,7 +93,9 @@ public fun BannerAdView(modifier: Modifier = Modifier, placement: String? = null
     // configure 안 한 상태면 placeholder Box — 광고 미표시.
     // isConfigured (평범한 Boolean) 대신 화면이 지켜볼 수 있는 자리를 읽는다.
     // 그래야 configure 가 이 배너보다 늦게 끝나도 그 순간 스스로 다시 그려진다 — 빈 칸으로 굳지 않는다.
-    if (!IndieKitAds.isConfiguredForCompose) {
+    // 광고 SDK 시작 (= 유럽 동의 확인, 2026-10) 전에도 빈 자리 — 동의 전에 광고를 요청하지 않는다.
+    // 이 값도 화면이 지켜볼 수 있어, 시작되는 순간 스스로 다시 그려져 광고를 요청한다.
+    if (!IndieKitAds.isConfiguredForCompose || !IndieKitAds.isAdsReadyForCompose) {
         Box(modifier = modifier.height(50.dp))
         return
     }
@@ -101,7 +110,8 @@ public fun BannerAdView(modifier: Modifier = Modifier, placement: String? = null
 
     // BoxWithConstraints 로 이 Composable 에 주어진 실제 폭을 잰다.
     // 회전 등으로 폭이 바뀌면 이 블록이 새 폭으로 다시 그려진다.
-    BoxWithConstraints(modifier = modifier) {
+    // contentAlignment = Center: 광고가 자리보다 작으면 자리 가운데에 (둘레는 투명 — 앱 바탕색이 보인다).
+    BoxWithConstraints(modifier = modifier, contentAlignment = Alignment.Center) {
         // 폭이 무제한 (스크롤 가로 등 특수한 자리) 이면 잴 수 없으므로 0 으로 두고 광고를 만들지 않는다.
         val measuredWidthDp = if (maxWidth != Dp.Infinity) maxWidth.value.toInt() else 0
 
@@ -127,11 +137,15 @@ public fun BannerAdView(modifier: Modifier = Modifier, placement: String? = null
             key(placement, adWidthDp) {
                 val adView = remember {
                     AdView(context).apply {
+                        // 바탕 투명 — 광고가 AdView 보다 작게 그려져도 남는 곳이 검게 보이지 않게.
+                        setBackgroundColor(Color.TRANSPARENT)
                         setAdSize(AdSize.getInlineAdaptiveBannerAdSize(adWidthDp, BANNER_MAX_HEIGHT_DP))
                         adUnitId = adUnitID
                         adListener = object : AdListener() {
                             override fun onAdLoaded() {
                                 IKLogger.ads.info("배너 광고 적재 성공 (자리: ${placement ?: "기본"}, 폭: ${adWidthDp}dp)")
+                                // 받은 광고의 실제 크기로 다시 재고 가운데 자리를 잡는다.
+                                requestLayout()
                                 AnalyticsBus.record("ad_loaded", adAnalyticsParams("banner", placement))
                             }
 
@@ -147,9 +161,22 @@ public fun BannerAdView(modifier: Modifier = Modifier, placement: String? = null
                     }
                 }
 
+                // AdView 를 자리 전체로 늘리지 않고, 투명한 그릇 안에 광고 크기만큼만 가운데에 둔다
+                // (예전엔 AdView 가 자리 폭 전체를 차지해 작은 광고 양옆이 검은 띠로 보였다).
                 AndroidView(
                     modifier = Modifier.fillMaxWidth(),
-                    factory = { adView },
+                    factory = { ctx ->
+                        (adView.parent as? ViewGroup)?.removeView(adView)
+                        BannerContainerLayout(ctx).apply {
+                            addView(
+                                adView,
+                                FrameLayout.LayoutParams(
+                                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                                    ViewGroup.LayoutParams.WRAP_CONTENT
+                                )
+                            )
+                        }
+                    },
                     update = {
                         // 갱신할 게 없음 — 크기 / ID 변경은 위 key 가 AdView 재생성으로 처리.
                     }

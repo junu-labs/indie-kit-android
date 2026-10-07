@@ -131,6 +131,16 @@ public object IndieKitAds {
     internal val isConfiguredForCompose: Boolean
         get() = configuredRevision.intValue > 0
 
+    /** 광고 SDK 준비 (= 유럽 동의 확인 뒤 시작 완료) 를 화면이 지켜볼 수 있게 담아 두는 자리. */
+    private val sdkReadyRevision = mutableIntStateOf(0)
+
+    /**
+     * 화면 (Composable) 이 읽는 "광고를 요청해도 되는가".
+     * 동의 확인 → SDK 시작이 끝나기 전에는 false — 배너 / Native 는 빈 자리로 기다린다.
+     */
+    internal val isAdsReadyForCompose: Boolean
+        get() = sdkReadyRevision.intValue > 0
+
     /** 전면 광고가 적재된 상태인지 — 디버그용. (기본 자리) */
     public val isInterstitialReady: Boolean
         get() = InterstitialAdLoader.loader(null).isLoaded
@@ -157,7 +167,9 @@ public object IndieKitAds {
      * 동작
      *  1. 광고 ID 보관 (자리 이름 → 출시 ID 묶음). 부른 실에서 곧바로 끝난다.
      *  2. `requestConsent` 가 true 이면 UMP 동의창 흐름 예약 (EEA 사용자에 한해 동의창 노출).
-     *  3. MobileAds.initialize 호출 (AdMob SDK 시작) — **뒷실에서**.
+     *  3. 동의가 광고 요청을 허락하면 (`canRequestAds`) MobileAds.initialize 호출 (AdMob SDK 시작) — **뒷실에서**.
+     *     구글 권고 순서 (2026-10). 지난 실행에서 받은 동의가 있으면 2 를 기다리지 않고 곧바로.
+     *     배너 / Native 도 SDK 준비 뒤에야 광고를 요청한다 (그 전엔 빈 자리).
      *
      * 전면 / 리워드 광고는 여기서 **미리 받지 않는다** (2026-10 — 안 보일 광고 요청이 일치율 · 노출률을 깎았다).
      * 띄울 차례가 가까우면 [prepareInterstitial] / [prepareRewarded] 를 부르거나,
@@ -216,27 +228,69 @@ public object IndieKitAds {
         }
 
         val appCtx = context.applicationContext
+        consentRequested = requestConsent
 
         // ── 1. 동의 절차를 먼저 건다 ──────────────────────────────────────────
         // 화면이 이미 떠 있으면 그 화면으로 바로, 아직 없으면 첫 화면이 잡히는 순간
         // 진행한다 (tryAutoRequestConsent 안에서 갈라짐). 어느 쪽이든 오래 걸리는 일이
-        // 아니라 화면을 붙잡지 않는다. 그리고 **반드시 SDK 시작보다 앞** 이어야 한다 —
-        // 동의 판정 전에 광고 요청이 먼저 나가는 틈을 줄인다.
-        if (requestConsent) {
-            tryAutoRequestConsent(context)
-        }
+        // 아니라 화면을 붙잡지 않는다. 절차가 끝나면 (창 닫힘 / 창 필요 없음 / 갱신 실패)
+        // 동의가 허락하는지 보고 SDK 를 시작한다.
+        val consentFlowScheduled = requestConsent && tryAutoRequestConsent(context)
 
-        // ── 2. SDK 시작은 뒷실에서 ─────────────────────────────────────────────
-        // MobileAds.initialize 는 Google Play 서비스에 붙고 광고 설정을 그물 너머에서 받아온다.
-        // 특히 깔고 나서 첫 실행에서는 수백 밀리초 이상 걸린다. 화면 그리는 실에서 부르면
-        // 첫 화면을 그리지 못한 채 폰이 "응답 없음" 으로 앱을 끈다.
-        // (매니페스트 OPTIMIZE_INITIALIZATION 표시는 SDK 24.0.0 부터 이미 기본으로 켜져 있지만,
-        //  구글 설명대로 시작 일의 *일부* 만 옮길 뿐이라 이 뒷실이 여전히 필요하다.)
-        // 출처: https://developers.google.com/admob/android/quick-start
-        //
-        // 코루틴 대신 Thread 를 쓰는 까닭: 이 모듈은 kotlinx-coroutines 를 자기 의존성으로
-        // 선언하지 않는다 (Compose 가 딸려 오는 것에 얹혀 있을 뿐). 한 번 쓰고 끝나는 일에
-        // 남의 짐을 기대지 않는다.
+        // ── 2. 동의가 허락하면 SDK 시작 (구글 권고 순서, 2026-10) ────────────────
+        // 예전 (0.9.3 ~) 에는 여기서 곧바로 SDK 를 시작해 동의 절차와 나란히 갔다 —
+        // 동의 전에 광고 요청이 나갈 틈이 있었다. 이제는 동의가 허락할 때만 시작한다:
+        //  · 동의 절차를 끈 앱 → 곧바로 (예전과 같음)
+        //  · 지난 실행에서 받은 동의가 있으면 → 절차 결과를 기다리지 않고 곧바로 (다시 켜는 사람은 늦지 않음)
+        //  · 아니면 → 절차가 끝난 순간 (onConsentFlowFinished)
+        // 동의 절차를 못 거는 별난 context (Application 이 아님) 면 예전처럼 곧바로 시작하고 경고만 남긴다.
+        if (requestConsent && !consentFlowScheduled) {
+            IKLogger.ads.warning("유럽 동의 절차를 걸 수 없어 동의를 기다리지 않고 광고 SDK 를 시작합니다 — configure 에 Application context 를 넘겨 주세요.")
+            consentRequested = false
+        }
+        // 저장된 동의 읽기도 configure 를 부른 순간 (Application.onCreate 일 수 있음) 이 아니라
+        // 화면 그리는 실의 다음 차례로 미뤄, 부른 쪽을 조금도 붙잡지 않는다.
+        Handler(Looper.getMainLooper()).post { startSdkIfAllowed(appCtx) }
+    }
+
+    // ────────────────────────────────────────────────────────────────────────
+    // 유럽 동의 → 광고 SDK 시작
+    // ────────────────────────────────────────────────────────────────────────
+
+    /** 앱이 동의 절차를 켰는지 (configure 의 requestConsent). 시작 문지기가 본다. */
+    @Volatile
+    private var consentRequested: Boolean = true
+
+    /** 광고 SDK 시작 문지기 — 한 번만, 동의가 허락할 때만 연다. */
+    private val startGate = AdsStartGate()
+
+    /** 동의 절차가 끝났을 때 (UMPCoordinator 가 부른다). 화면 그리는 실. */
+    internal fun onConsentFlowFinished() {
+        val ctx = appContext ?: return
+        startSdkIfAllowed(ctx)
+    }
+
+    /**
+     * 동의가 허락하면 (그리고 아직 안 했으면) 광고 SDK 를 시작한다. 화면 그리는 실에서 부른다.
+     *
+     * SDK 시작 자체는 **뒷실에서** (0.9.3 고침 그대로):
+     * MobileAds.initialize 는 Google Play 서비스에 붙고 광고 설정을 그물 너머에서 받아온다.
+     * 특히 깔고 나서 첫 실행에서는 수백 밀리초 이상 걸린다. 화면 그리는 실에서 부르면
+     * 첫 화면을 그리지 못한 채 폰이 "응답 없음" 으로 앱을 끈다.
+     * (매니페스트 OPTIMIZE_INITIALIZATION 표시는 SDK 24.0.0 부터 이미 기본으로 켜져 있지만,
+     *  구글 설명대로 시작 일의 *일부* 만 옮길 뿐이라 이 뒷실이 여전히 필요하다.)
+     * 출처: https://developers.google.com/admob/android/quick-start
+     *
+     * 코루틴 대신 Thread 를 쓰는 까닭: 이 모듈은 kotlinx-coroutines 를 자기 의존성으로
+     * 선언하지 않는다 (Compose 가 딸려 오는 것에 얹혀 있을 뿐). 한 번 쓰고 끝나는 일에
+     * 남의 짐을 기대지 않는다.
+     */
+    private fun startSdkIfAllowed(appCtx: Context) {
+        val requestConsent = consentRequested
+        val canRequestAds = !requestConsent || UMPCoordinator.canRequestAds(appCtx)
+        if (!startGate.tryStart(requestConsent, canRequestAds)) return
+
+        IKLogger.ads.info("광고 SDK 시작 (동의 확인 뒤)")
         Thread({
             MobileAds.initialize(appCtx) {
                 IKLogger.ads.info("MobileAds.initialize 완료")
@@ -274,6 +328,8 @@ public object IndieKitAds {
      */
     private fun onSdkReady(appCtx: Context) {
         isSdkReady = true
+        // 기다리던 배너 / Native 가 이 순간 스스로 다시 그려져 광고를 요청한다.
+        sdkReadyRevision.intValue += 1
         val pending = afterSdkReady.toList()
         afterSdkReady.clear()
         pending.forEach { it() }
@@ -346,11 +402,15 @@ public object IndieKitAds {
      * "지금 화면" 읽기와 예약 걸기가 서로 엇갈리지 않는다.
      *
      * 다른 형태의 context (Service 등) 가 들어오면 자동 흐름은 건너뜀 — 사용자가 직접 requestConsentForm 호출.
+     *
+     * 절차가 끝나면 (어느 갈래든, 창을 띄웠든 아니든) [onConsentFlowFinished] 로 SDK 시작 여부를 다시 본다.
+     *
+     * @return 동의 절차를 걸었으면 true. 걸 수 없는 context 면 false.
      */
-    private fun tryAutoRequestConsent(context: Context) {
+    private fun tryAutoRequestConsent(context: Context): Boolean {
         val app = context.applicationContext as? Application ?: run {
             IKLogger.ads.debug("자동 UMP 동의 흐름 건너뜀 — Application context 가 아님.")
-            return
+            return false
         }
 
         // 추적자가 자동으로 안 심긴 별난 환경 대비 — 이미 심겼으면 아무 일 안 함.
@@ -360,7 +420,7 @@ public object IndieKitAds {
             val activityNow = CurrentActivityTracker.current
             if (activityNow != null) {
                 // 갈래 1 — 화면이 이미 있다: 지금 바로 진행.
-                UMPCoordinator.requestConsentInfoUpdate(app, activityNow, consentTestSettings)
+                UMPCoordinator.requestConsentInfoUpdate(app, activityNow, consentTestSettings, ::onConsentFlowFinished)
             } else {
                 // 갈래 2 — 화면이 아직 없다: 첫 화면이 잡히는 순간 한 번 진행.
                 app.registerActivityLifecycleCallbacks(object : Application.ActivityLifecycleCallbacks {
@@ -375,7 +435,7 @@ public object IndieKitAds {
 
                     private fun fire(activity: Activity) {
                         app.unregisterActivityLifecycleCallbacks(this)
-                        UMPCoordinator.requestConsentInfoUpdate(app, activity, consentTestSettings)
+                        UMPCoordinator.requestConsentInfoUpdate(app, activity, consentTestSettings, ::onConsentFlowFinished)
                     }
 
                     override fun onActivityPaused(activity: Activity) {}
@@ -385,6 +445,7 @@ public object IndieKitAds {
                 })
             }
         }
+        return true
     }
 
     // ────────────────────────────────────────────────────────────────────────
@@ -440,7 +501,11 @@ public object IndieKitAds {
      * @param onComplete 동의창 닫힘 후 호출. 에러 발생 시 Throwable 로 전달.
      */
     public fun requestConsentForm(activity: Activity, onComplete: (Throwable?) -> Unit = {}) {
-        UMPCoordinator.presentForm(activity, onComplete)
+        UMPCoordinator.presentForm(activity) { error ->
+            // 이번 실행에서 처음 허락을 받았으면 (예: 첫 창을 놓쳤다가 설정에서 다시 답함) 이제 시작한다.
+            if (initializedFlag) onConsentFlowFinished()
+            onComplete(error)
+        }
     }
 
     /**

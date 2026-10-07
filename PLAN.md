@@ -379,8 +379,11 @@ JitPack push 전 사용자 승인 필수.
 
 ## 14. 미결정 / TODO
 
-- [ ] Hilt 의존성 완전 제거 vs optional Hilt module 추가 여부 — 2단계 (Ads) 검증 후 결정
-- [ ] `BuildConfig.DEBUG` 대신 `ApplicationInfo.FLAG_DEBUGGABLE` 유지 — 결정 (호환성 우선)
-- [ ] AdMob v23 → 향후 메이저 버전업 대응 정책 (`23.+` caret 유지 vs 고정 버전)
-- [ ] AGP 10 / Kotlin 2.4 진입 시점에 `android.builtInKotlin=true` + `android.newDsl=true` 로 일괄 마이그레이션 (gradle.properties 두 줄 제거 + libs.versions.toml 의 kotlin-android 플러그인 제거 + 모든 모듈 build.gradle.kts 의 plugin alias 한 줄 제거)
-- [ ] Foojay 가 Gradle 9 와 호환되면 `kotlin { jvmToolchain(17) }` 로 되돌릴지 검토 — CI 와 로컬 PC 의 JDK 차이를 내부에서 해소 가능
+2026-10 빌드 설정 정리에서 아래를 매듭지었다 (기능 변화 없음 — 앱이 받는 .aar 는 같다).
+
+- [x] Hilt — **안 넣는다.** 어느 모듈에도 Hilt 의존성이 없다 (위 "의존성 주입" 줄: object 싱글톤). Hilt 를 쓰는 앱은 자기 쪽에서 `@Provides` 한 줄로 감싼다. optional Hilt 모듈도 만들지 않는다 — 감쌀 것이 싱글톤 몇 개뿐이라 모듈 하나를 더 배포할 값이 없다.
+- [x] `BuildConfig.DEBUG` 대신 `ApplicationInfo.FLAG_DEBUGGABLE` 유지 — 라이브러리 자신의 BuildConfig 는 배포판에서 늘 release 라, 쓰는 앱의 표식을 봐야 한다 (광고 시험 ID · 버전 확인 서버 고르기 모두 이 기준).
+- [x] AdMob 판 고정 방식 — **정확한 판 하나로 고정** (`playServicesAds = "25.4.0"`, `+` 범위 안 씀). 범위로 두면 같은 태그라도 빌드한 날에 따라 SDK 가 달라진다. 올릴 때는 `libs.versions.toml` 한 줄 + CHANGELOG 에 까닭.
+- [x] 내장 Kotlin / 새 DSL — **이미 옮겨 있다** (0.9.0). `gradle.properties` 에 `android.builtInKotlin` / `android.newDsl` 줄이 없고 (AGP 9 기본값 true), 모듈들은 kotlin-android 플러그인을 쓰지 않는다. 남아 있던 `libs.versions.toml` 의 `kotlin-android` 플러그인 줄 (아무도 안 씀) 을 뺐다. AGP 10 으로 올릴 때 따로 옮길 것은 없다. (2단계 아래 "발견한 결정" 의 `=false` 두 줄은 0단계 때 기록이다.)
+- [x] `jvmToolchain(17)` — **되돌리지 않는다.** 도구 체인을 걸면 빌드하는 곳 (JitPack · CI · 로컬) 마다 JDK 17 을 따로 구하거나 Foojay 로 내려받아야 한다. 지금은 빌드 JDK 21 (jitpack.yml) 하나로 돌리고 바이트코드만 17 로 못박아 (`compileOptions` + `jvmTarget`) 같은 결과를 더 적은 짐으로 얻는다. JitPack 이 JDK 21 을 못 쓰게 될 때 다시 본다.
+- [x] 쓰지 않던 `okhttp-mockwebserver` 카탈로그 줄도 뺐다 (시험은 자체 Interceptor 로 응답을 꾸민다).

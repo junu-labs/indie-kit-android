@@ -80,7 +80,8 @@ public fun NativeAdView(modifier: Modifier = Modifier, placement: String? = null
 
     // 화면 몸통에서 읽어야 configure 완료를 지켜볼 수 있다 (DisposableEffect 안에서 읽으면 못 지켜본다).
     // 아래 DisposableEffect 의 열쇠로도 넘겨, 설정이 나중에 끝나면 그때 광고를 불러오게 한다.
-    val configured = IndieKitAds.isConfiguredForCompose
+    // 광고 SDK 시작 (= 유럽 동의 확인, 2026-10) 뒤에만 요청한다 — 그 전엔 빈 자리로 기다린다.
+    val configured = IndieKitAds.isConfiguredForCompose && IndieKitAds.isAdsReadyForCompose
 
     DisposableEffect(placement, configured) {
         // "이 자리는 이미 걷혔다" 는 표식. **이 효과 한 번에만 딸린다.**
@@ -126,6 +127,13 @@ public fun loadNativeAd(
     placement: String? = null,
     onAdLoaded: (NativeAd) -> Unit
 ) {
+    // 광고 SDK 시작 (= 유럽 동의 확인, 2026-10) 전이면 시작 뒤로 미룬다 — 동의 전에 광고를 요청하지 않는다.
+    if (IndieKitAds.isConfigured && !IndieKitAds.isSdkReady) {
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            IndieKitAds.runAfterSdkReady { loadNativeAd(context, placement, onAdLoaded) }
+        }
+        return
+    }
     // 출시 빌드인데 운영 ID 가 없으면 null — 광고를 적재하지 않는다 (테스트 광고 노출 방지).
     val adUnitID = IndieKitAds.resolvedNativeAdUnitID(context, placement)
     if (adUnitID == null) {

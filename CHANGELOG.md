@@ -16,14 +16,40 @@
 
 - `IndieKitAds.prepareInterstitial(placement)` / `IndieKitAds.prepareRewarded(placement)` — 띄울 차례가 가까울 때 앱이 불러 미리 받아 둔다 (예: 오늘 할 일이 하나 남았을 때, "광고 보고 받기" 단추가 있는 화면이 열릴 때). 어느 실에서 불러도 되고, 여러 번 불러도 요청은 한 번. 앱 시작 직후처럼 띄울지 모를 때 부르면 일치율이 다시 떨어지므로 그때는 부르지 않는다.
 
+### 고침 (광고 — 하루세팅 · 탭카운터 시험에서 배너 둘레 검은 띠가 보인 건에서 출발)
+
+- **광고가 자리보다 작으면 남는 곳이 검은 띠로 보이던 문제.** `BannerAdView` 의 AdView 가 자리 폭 전체를 차지하는데 남는 곳의 바탕을 정하지 않아, 320×50 · 468×60 (시험 광고) 같은 광고가 오면 양옆이 검게 칠해졌다 (광고 규칙 "검은 띠 금지" 위반). 이제 AdView 바탕을 투명으로 두고, 투명한 그릇 (`BannerContainerLayout`) 안에 **받은 광고 크기만큼만, 자리 가운데에** 둔다. 둘레에는 앱이 칠한 광고 자리 바탕색이 그대로 보인다. 광고가 자리보다 크면 자리 안으로 줄여 잡는다.
+
+### 고침 (광고 — 유럽 동의를 받은 뒤에 광고 SDK 시작, 0.9.3 의 "아직 안 따랐다" 숙제)
+
+- **동의 예약과 SDK 시작이 나란히 가던 순서.** 구글 권고는 유럽 사용자 동의 (UMP) 를 받은 뒤 광고 SDK 를 시작하는 것인데, 0.9.3 부터 동의 예약 직후 곧바로 SDK 를 시작해 동의 전에 광고 요청이 나갈 틈이 있었다. 이제 **동의 절차가 끝나고 (창 닫힘 / 창 필요 없음 / 갱신 실패) 동의가 광고 요청을 허락할 때만** (`canRequestAds`) SDK 를 시작한다. 지난 실행에서 받아 둔 동의가 있으면 절차 결과를 기다리지 않고 곧바로 시작해 (구글 예제와 같음) 다시 켜는 사람은 늦지 않는다. 시작은 한 번만 (`AdsStartGate`).
+- **0.9.3 의 "첫 화면이 멈추지 않게" 는 그대로.** SDK 시작은 여전히 뒷실에서, 저장된 동의 읽기도 configure 를 부른 순간이 아니라 화면 그리는 실의 다음 차례로 미룬다. 앱은 예전처럼 `Application.onCreate` 에서 `configure(this)` 를 불러도 된다. 0.9.4 의 "화면이 뜬 뒤 configure 해도 동의 절차가 돈다" 도 그대로.
+- **배너 · Native 도 SDK 준비 뒤에만 광고를 요청한다.** 예전엔 configure 직후 요청했다. 이제 준비 전엔 빈 자리로 기다리다 준비되는 순간 스스로 다시 그려져 요청한다. `loadNativeAd` 를 직접 부른 것도 준비 뒤로 미룬다. 유럽 사용자가 처음 켤 때는 동의창에 답한 뒤에 배너가 뜬다.
+- 동의가 필요한데 허락을 못 받으면 그 실행에서는 광고를 시작하지 않는다 (정책 먼저). 설정의 "광고 설정 바꾸기" (`requestConsentForm`) 로 답하면 그때 시작한다. `requestConsent = false` 인 앱, 그리고 동의 절차를 걸 수 없는 별난 context (Application 이 아님) 는 예전처럼 곧바로 시작한다 (뒤의 것은 경고 로그).
+
+### 추가 (네트워크 — 앱 버전 확인을 모듈로)
+
+- `AppVersionCheck.check(context, slug)` — 앱마다 따로 짜던 AppVersionChecker 를 한 줄로. junu 서버 (`POST /compliance/app-version/`, 앱이 debuggable 이면 dev, 아니면 api — 모듈이 고름) 에 묻고 `null` / `OPTIONAL` / `FORCED` 를 돌려준다. 실패 · SUCCESS 아님이면 조용히 null. 선택 업데이트는 서버 버전마다 한 번만 (모듈 몫 SharedPreferences 에 기억). 디스크 · 그물 일은 뒷실에서 — 어느 실에서 불러도 된다. 창 모양은 앱 몫 (알림창 부품 + 고양이).
+- 쪼갠 도구도 공개: `fetch` (묻기만) · `decide` (창 고르기) · `parse` / `isNewer` (버전 비교 — iOS 와 같은 규칙) · `openStore(context)` (스토어 앱, 없으면 웹) · `marketUri` / `webStoreUrl`. 자료형 `AppUpdatePrompt`, `AppVersionInfo`. iOS 자매와 같은 이름.
+
+### 바뀜 (빌드 설정 정리 — PLAN.md "14. 미결정 / TODO" 매듭. 기능 변화 없음)
+
+- 쓰지 않던 카탈로그 줄 두 개를 뺐다: `kotlin-android` 플러그인 (0.9.0 부터 AGP 내장 Kotlin 이라 아무 모듈도 안 씀), `okhttp-mockwebserver` (시험은 자체 Interceptor 로 응답을 꾸밈).
+- 결정만 적은 것 (PLAN.md 14): Hilt 는 안 넣는다 (object 싱글톤 — Hilt 앱은 자기 쪽에서 감쌈) · AdMob 은 `+` 범위 없이 정확한 판 하나로 고정 · 내장 Kotlin / 새 DSL 은 이미 옮겨 있어 AGP 10 때 따로 할 일 없음 · `jvmToolchain(17)` 은 되돌리지 않는다 (빌드 JDK 21 하나 + 바이트코드 17 고정이 짐이 적음).
+- 앱이 받는 .aar 는 같다.
+
 ### 앱에서 바꿀 것
 
 - 꼭 바꿀 것은 없다 — 고치지 않아도 빌드되고 돈다. 다만 그대로 두면 **각 실행의 첫 전면 광고 차례는 건너뛴다** (그때 받아 두고 다음 차례에 띄움). 첫 차례부터 띄우려면 띄울 차례 바로 앞 단계에서 `prepareInterstitial()` 을 부른다. 리워드 광고를 쓰는 앱은 단추가 있는 화면이 열릴 때 `prepareRewarded()` 를 부른다 (안 부르면 첫 단추 누름에 보상이 null).
 - 쓰지 않는 리워드 ID 를 `rewardedAdUnitIDs` 에 넣어 둔 앱도 이제 요청이 나가지 않는다 (예전엔 켤 때마다 나갔다).
+- 광고 자리 (AdSlot) 바탕은 앱이 칠해 둔다 (이미 규칙). 모듈은 이제 둘레를 투명으로 두므로 그 색이 보인다.
+- 앱 버전 확인은 옮기고 싶은 앱부터 수정 요청으로: 앱의 `AppVersionChecker` 를 `prompt = AppVersionCheck.check(context, BuildConfig.JL_SERVER_SLUG)` 한 줄로 바꾸고, 업데이트 버튼은 `AppVersionCheck.openStore(context)`. 판 목록에 `indie-kit-network` 가 있어야 한다. 앱이 자기 prefs 에 기억해 둔 "이미 본 선택 업데이트" 는 옮겨지지 않아, 옮긴 첫 실행에 같은 선택 창이 한 번 더 뜰 수 있다.
 
 ### 검증
 
-- 단위 시험 `full screen ads are not preloaded on configure` · `full screen ad state does not duplicate requests` · `full screen ad state expires old ads` · `full screen ad state presenting and dismiss` · `full screen ad state failure allows retry` · `prepare before configure is ignored` 더함. (이번 작업 환경에 Java 가 없어 담당이 직접 돌리지 못함 — 공장 빌드에서 확인.)
+- 단위 시험 `full screen ads are not preloaded on configure` · `full screen ad state does not duplicate requests` · `full screen ad state expires old ads` · `full screen ad state presenting and dismiss` · `full screen ad state failure allows retry` · `prepare before configure is ignored` 더함.
+- 단위 시험 `ads start gate waits for consent` · `ads start gate starts only once` · `ads start gate without consent starts immediately` · `ads are not ready for compose before configure` · `banner smaller than slot is centered` · `banner larger than slot is clamped` · `banner unknown size fills slot` (광고) · 버전 비교 · 창 고르기 · 버전 묻기 (요청 모양 / 실패면 null) · 스토어 주소 (네트워크) 더함.
+- `./gradlew testDebugUnitTest assembleRelease` 통과 (광고 22 · 네트워크 14, 앞 요청의 시험 포함).
 
 ## [0.9.4] - 2026-08-07
 
