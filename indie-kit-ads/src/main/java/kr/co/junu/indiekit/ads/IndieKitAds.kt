@@ -18,23 +18,20 @@
  *
  * 사용 방법 (앱 측)
  *  ```kotlin
- *  // Application.onCreate 에서 한 번:
- *  IndieKitAds.configure(this, requestConsent = true)
- *
- *  // 화면마다 다른 배너 ID 를 쓰고 싶으면 자리 (placement) 등록:
+ *  // Application.onCreate 에서 한 번 — 광고 종류마다 ID 목록. 안 쓰는 종류는 빈 목록
+ *  // (2026-10 — 옛 자리 이름 묶음은 @Deprecated):
  *  IndieKitAds.configure(
  *      context = this,
- *      bannerAdUnitIDs = mapOf(                                                    // 배너 ID 묶음
- *          IndieKitAds.DEFAULT_PLACEMENT to AdUnitID(release = "ca-app-pub-..."),  // 기본 배너
- *          "settings"                    to AdUnitID(release = "ca-app-pub-...-settings")
- *      )
+ *      bannerIDs = listOf("ca-app-pub-.../111", "ca-app-pub-.../222"),  // 첫 ID = 자리 이름 없이 부르는 배너
+ *      interstitialIDs = listOf("ca-app-pub-.../333"),
+ *      rewardedIDs = emptyList(),                                        // 보상 광고 안 씀
+ *      requestConsent = true
  *  )
  *
  *  // 화면 안에서 (Compose):
  *  if (!subscription.isPro) {
- *      BannerAdView(modifier = Modifier.fillMaxWidth())                          // 기본 자리 (DEFAULT_PLACEMENT)
- *      BannerAdView(modifier = Modifier.fillMaxWidth(), placement = "settings")  // "settings" 자리 ID 사용
- *      NativeAdView(modifier = Modifier.fillMaxWidth())
+ *      BannerAdView(modifier = Modifier.fillMaxWidth())                                    // 목록의 첫 배너 ID
+ *      BannerAdView(modifier = Modifier.fillMaxWidth(), placement = "ca-app-pub-.../222")  // 두 번째 ID 는 그 ID 를 자리 이름으로
  *  }
  *
  *  // 운동 마지막 세트에 들어갈 때 (띄울 차례가 가까울 때만 — 앱 시작 때 부르지 않는다):
@@ -100,10 +97,12 @@ public object IndieKitAds {
     private var appContext: Context? = null
 
     // 광고 종류마다 자리 이름 → ID 묶음 한 칸. 자리 이름을 안 넘긴 경우는 DEFAULT_PLACEMENT 키로 찾는다.
-    private var bannerAdUnitIDs: Map<String, AdUnitID> = emptyMap()
-    private var interstitialAdUnitIDs: Map<String, AdUnitID> = emptyMap()
-    private var rewardedAdUnitIDs: Map<String, AdUnitID> = emptyMap()
-    private var nativeAdUnitIDs: Map<String, AdUnitID> = emptyMap()
+    // null = 이 앱은 그 종류의 광고를 안 쓴다 (새 configure 에 빈 목록을 넘김) — 디버그에서도 시험 광고조차 안 띄운다.
+    // emptyMap = 옛 configure 에서 안 넘긴 것 — 예전처럼 디버그는 시험 광고, 출시는 미표시.
+    private var bannerAdUnitIDs: Map<String, AdUnitID>? = emptyMap()
+    private var interstitialAdUnitIDs: Map<String, AdUnitID>? = emptyMap()
+    private var rewardedAdUnitIDs: Map<String, AdUnitID>? = emptyMap()
+    private var nativeAdUnitIDs: Map<String, AdUnitID>? = emptyMap()
 
     /** 시험용 나라 강제 설정 (configure 에서 보관). null 이면 실제 위치대로. 디버그 빌드에서만 반영. */
     @Volatile
@@ -199,6 +198,9 @@ public object IndieKitAds {
      *                            에뮬레이터 / 시험 기기에서 확인할 때만 넘긴다.
      *                            디버그 빌드에서만 반영, 출시 빌드에서는 무시 (경고 로그).
      */
+    @Deprecated(
+        "configure(context, bannerIDs, interstitialIDs, rewardedIDs) 를 쓰세요 — 광고 종류마다 ID 목록만 넘기고, 안 쓰는 종류는 emptyList()."
+    )
     public fun configure(
         context: Context,
         bannerAdUnitIDs: Map<String, AdUnitID> = emptyMap(),
@@ -207,6 +209,71 @@ public object IndieKitAds {
         nativeAdUnitIDs: Map<String, AdUnitID> = emptyMap(),
         requestConsent: Boolean = true,
         consentTestSettings: ConsentTestSettings? = null
+    ) {
+        start(
+            context, bannerAdUnitIDs, interstitialAdUnitIDs, rewardedAdUnitIDs, nativeAdUnitIDs,
+            requestConsent, consentTestSettings
+        )
+    }
+
+    /**
+     * 광고 모듈을 처음 설정한다 — 광고 종류마다 **광고 ID 목록** 을 받는다. (2026-10, 옛 자리 이름 묶음 대신)
+     *
+     * "기본 광고 ID" 는 따로 없다. 종류마다 목록의 **첫 ID** 가 자리 이름 없이 부르는 광고
+     * (`BannerAdView()`, `showInterstitial(activity)` …) 이고, 두 번째부터는 그 ID 글자를 자리 이름으로 넘겨 부른다
+     * (`BannerAdView(placement = "ca-app-pub-…/222")`).
+     *
+     * 안 쓰는 종류는 **빈 목록** — 그 종류는 디버그에서도 아무 광고를 요청하지 않는다.
+     * 쓰는데 출시 ID 가 아직 없으면 빈 글자를 넣는다 (`listOf(BuildConfig.AD_BANNER_ID)` 의 값이 "")
+     * — 디버그는 시험 광고, 출시는 미표시.
+     *
+     * 실 규칙 · 부르는 시점 · 동의 → SDK 시작 순서 · 전면 / 리워드를 미리 받지 않는 것은 옛 configure 와 같다.
+     *
+     * ```kotlin
+     * IndieKitAds.configure(
+     *     context = app,
+     *     bannerIDs = listOf(BuildConfig.AD_BANNER_ID),
+     *     interstitialIDs = listOf(BuildConfig.AD_INTERSTITIAL_ID),
+     *     rewardedIDs = emptyList(),          // 보상 광고를 안 쓰는 앱
+     *     requestConsent = true)
+     * ```
+     *
+     * @param context Application context.
+     * @param bannerIDs 배너 광고 ID 목록. 안 쓰면 emptyList().
+     * @param interstitialIDs 전면 광고 ID 목록. 안 쓰면 emptyList().
+     * @param rewardedIDs 보상 (리워드) 광고 ID 목록. 안 쓰면 emptyList().
+     * @param nativeIDs Native 광고 ID 목록. 기본 비어 있음 (안 씀).
+     * @param requestConsent true 면 UMP 동의창 자동 시작. EEA 외 사용자엔 영향 없음.
+     * @param consentTestSettings 시험용 나라 강제 설정 — 디버그 빌드에서만 반영.
+     */
+    public fun configure(
+        context: Context,
+        bannerIDs: List<String>,
+        interstitialIDs: List<String>,
+        rewardedIDs: List<String>,
+        nativeIDs: List<String> = emptyList(),
+        requestConsent: Boolean = true,
+        consentTestSettings: ConsentTestSettings? = null
+    ) {
+        start(
+            context,
+            placementMap(bannerIDs),
+            placementMap(interstitialIDs),
+            placementMap(rewardedIDs),
+            placementMap(nativeIDs),
+            requestConsent, consentTestSettings
+        )
+    }
+
+    /** 두 configure 가 같이 쓰는 몸통. 묶음이 null 이면 그 종류는 안 쓴다. */
+    private fun start(
+        context: Context,
+        bannerAdUnitIDs: Map<String, AdUnitID>?,
+        interstitialAdUnitIDs: Map<String, AdUnitID>?,
+        rewardedAdUnitIDs: Map<String, AdUnitID>?,
+        nativeAdUnitIDs: Map<String, AdUnitID>?,
+        requestConsent: Boolean,
+        consentTestSettings: ConsentTestSettings?
     ) {
         configureLock.lock()
         val alreadyConfigured = initializedFlag
@@ -335,8 +402,8 @@ public object IndieKitAds {
         pending.forEach { it() }
 
         if (FullScreenAdPolicy.PRELOADS_ON_CONFIGURE) {
-            interstitialAdUnitIDs.keys.forEach { InterstitialAdLoader.loader(it).prepare(appCtx) }
-            rewardedAdUnitIDs.keys.forEach { RewardedAdLoader.loader(it).prepare(appCtx) }
+            interstitialAdUnitIDs?.keys?.forEach { InterstitialAdLoader.loader(it).prepare(appCtx) }
+            rewardedAdUnitIDs?.keys?.forEach { RewardedAdLoader.loader(it).prepare(appCtx) }
         }
     }
 
@@ -532,23 +599,42 @@ public object IndieKitAds {
      * @param placement configure 의 `bannerAdUnitIDs` 에 등록한 자리 이름. null 이면 기본 자리.
      */
     public fun resolvedBannerAdUnitID(context: Context, placement: String? = null): String? =
-        selectAdUnitID(bannerAdUnitIDs, placement, "배너")
-            .resolve(context, AdMobTestUnitID.BANNER)
+        bannerAdUnitIDs?.let { selectAdUnitID(it, placement, "배너").resolve(context, AdMobTestUnitID.BANNER) }
 
-    /** 전면 광고 ID. null 이면 광고 미표시. */
+    /** 전면 광고 ID. null 이면 광고 미표시 (전면을 안 쓰는 앱이면 언제나 null). */
     public fun resolvedInterstitialAdUnitID(context: Context, placement: String? = null): String? =
-        selectAdUnitID(interstitialAdUnitIDs, placement, "전면")
-            .resolve(context, AdMobTestUnitID.INTERSTITIAL)
+        interstitialAdUnitIDs?.let { selectAdUnitID(it, placement, "전면").resolve(context, AdMobTestUnitID.INTERSTITIAL) }
 
-    /** 리워드 광고 ID. null 이면 광고 미표시. */
+    /** 리워드 광고 ID. null 이면 광고 미표시 (리워드를 안 쓰는 앱이면 언제나 null). */
     public fun resolvedRewardedAdUnitID(context: Context, placement: String? = null): String? =
-        selectAdUnitID(rewardedAdUnitIDs, placement, "리워드")
-            .resolve(context, AdMobTestUnitID.REWARDED)
+        rewardedAdUnitIDs?.let { selectAdUnitID(it, placement, "리워드").resolve(context, AdMobTestUnitID.REWARDED) }
 
-    /** Native 광고 ID. null 이면 광고 미표시. */
+    /** Native 광고 ID. null 이면 광고 미표시 (Native 를 안 쓰는 앱이면 언제나 null). */
     public fun resolvedNativeAdUnitID(context: Context, placement: String? = null): String? =
-        selectAdUnitID(nativeAdUnitIDs, placement, "Native")
-            .resolve(context, AdMobTestUnitID.NATIVE)
+        nativeAdUnitIDs?.let { selectAdUnitID(it, placement, "Native").resolve(context, AdMobTestUnitID.NATIVE) }
+
+    /**
+     * 광고 ID 목록 → 자리 이름 묶음. (새 configure 가 쓴다)
+     *
+     * 규칙
+     *  - 빈 목록 → null: 이 종류의 광고는 안 쓴다. 띄우라고 해도 아무것도 안 한다 (디버그 시험 광고도 없음).
+     *  - 목록의 첫 ID → 자리 이름 없이 (`placement = null`) 부르는 광고.
+     *  - 빈 글자가 아닌 ID 는 그 글자 그대로를 자리 이름으로도 등록 — 두 번째 ID 부터는 `placement = "그 ID"` 로 부른다.
+     *  - 빈 글자 ("") 는 "쓰긴 하는데 출시 ID 가 아직 없음" — 디버그는 시험 광고, 출시는 미표시.
+     *
+     * internal — 단위 검증에서 직접 호출. iOS 자매 (`placementMap(fromIDs:)`) 와 같은 규칙.
+     */
+    internal fun placementMap(ids: List<String>): Map<String, AdUnitID>? {
+        if (ids.isEmpty()) return null
+        val map = LinkedHashMap<String, AdUnitID>()
+        ids.forEachIndexed { index, raw ->
+            val id = raw.trim()
+            val unit = AdUnitID(release = id.ifEmpty { null })
+            if (index == 0) map[DEFAULT_PLACEMENT] = unit
+            if (id.isNotEmpty() && id !in map) map[id] = unit
+        }
+        return map
+    }
 
     /**
      * 자리 이름으로 광고 ID 한 쌍을 고른다.

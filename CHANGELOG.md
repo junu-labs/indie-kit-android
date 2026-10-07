@@ -32,6 +32,12 @@
 - `AppVersionCheck.check(context, slug)` — 앱마다 따로 짜던 AppVersionChecker 를 한 줄로. junu 서버 (`POST /compliance/app-version/`, 앱이 debuggable 이면 dev, 아니면 api — 모듈이 고름) 에 묻고 `null` / `OPTIONAL` / `FORCED` 를 돌려준다. 실패 · SUCCESS 아님이면 조용히 null. 선택 업데이트는 서버 버전마다 한 번만 (모듈 몫 SharedPreferences 에 기억). 디스크 · 그물 일은 뒷실에서 — 어느 실에서 불러도 된다. 창 모양은 앱 몫 (알림창 부품 + 고양이).
 - 쪼갠 도구도 공개: `fetch` (묻기만) · `decide` (창 고르기) · `parse` / `isNewer` (버전 비교 — iOS 와 같은 규칙) · `openStore(context)` (스토어 앱, 없으면 웹) · `marketUri` / `webStoreUrl`. 자료형 `AppUpdatePrompt`, `AppVersionInfo`. iOS 자매와 같은 이름.
 
+### 바뀜 (광고 — 모듈 초기화 때 "기본 광고 ID" 와 배너 ID 가 같게 들어가던 건에서 출발)
+
+- **광고 ID 를 "자리 이름 → ID" 묶음으로 받아 기본 ID 와 배너 ID 가 헷갈리던 것.** 앱은 `bannerAdUnitIDs = mapOf(IndieKitAds.DEFAULT_PLACEMENT to AdUnitID(release = 배너ID))` 처럼 "기본 자리" 라는 이름에 배너 ID 를 넣어야 했고, 광고를 안 쓰는 종류는 빈 묶음을 넘겨도 디버그에서 시험 광고를 요청할 수 있었다. 새 `configure(context, bannerIDs, interstitialIDs, rewardedIDs, nativeIDs, requestConsent, consentTestSettings)` 는 **광고 종류마다 ID 목록** 만 받는다. 기본 ID 는 따로 없다 — 목록의 첫 ID 가 자리 이름 없이 부르는 광고이고, 두 번째부터는 그 ID 글자를 자리 이름으로 넘겨 부른다 (`BannerAdView(placement = "ca-app-pub-…/222")`).
+- **광고 ID 가 없는 경우.** 빈 목록 = 그 종류를 안 쓰는 앱 — 띄우라고 해도 아무것도 안 하고 **디버그에서도 시험 광고조차 요청하지 않는다** (배너 자리는 빈 칸, 전면은 곧바로 onDismiss, 보상은 null). 목록에 빈 글자 (`listOf("")`, 열쇠 파일 값이 아직 빔) = 쓰긴 하는데 출시 ID 가 아직 없음 — 디버그는 시험 광고, 출시는 미표시 (빈 글자를 출시 ID 로 요청하지 않는다). 배너 · 전면 · 보상은 꼭 적게 했다 (안 쓰면 `emptyList()`).
+- 옛 `configure(context, bannerAdUnitIDs = …)` 는 `@Deprecated` 로 남겼다 — 동작은 예전 그대로 (빌드 경고만 뜬다). 실 규칙 (어느 실에서 불러도 됨, SDK 시작은 뒷실) · 동의 → SDK 시작 순서는 두 함수가 같은 몸통을 쓴다.
+
 ### 바뀜 (빌드 설정 정리 — PLAN.md "14. 미결정 / TODO" 매듭. 기능 변화 없음)
 
 - 쓰지 않던 카탈로그 줄 두 개를 뺐다: `kotlin-android` 플러그인 (0.9.0 부터 AGP 내장 Kotlin 이라 아무 모듈도 안 씀), `okhttp-mockwebserver` (시험은 자체 Interceptor 로 응답을 꾸밈).
@@ -44,12 +50,14 @@
 - 쓰지 않는 리워드 ID 를 `rewardedAdUnitIDs` 에 넣어 둔 앱도 이제 요청이 나가지 않는다 (예전엔 켤 때마다 나갔다).
 - 광고 자리 (AdSlot) 바탕은 앱이 칠해 둔다 (이미 규칙). 모듈은 이제 둘레를 투명으로 두므로 그 색이 보인다.
 - 앱 버전 확인은 옮기고 싶은 앱부터 수정 요청으로: 앱의 `AppVersionChecker` 를 `prompt = AppVersionCheck.check(context, BuildConfig.JL_SERVER_SLUG)` 한 줄로 바꾸고, 업데이트 버튼은 `AppVersionCheck.openStore(context)`. 판 목록에 `indie-kit-network` 가 있어야 한다. 앱이 자기 prefs 에 기억해 둔 "이미 본 선택 업데이트" 는 옮겨지지 않아, 옮긴 첫 실행에 같은 선택 창이 한 번 더 뜰 수 있다.
+- 광고 시작을 새 configure 로 — 꼭은 아니지만 옛 것은 빌드 경고가 뜬다. 예: `IndieKitAds.configure(context = app, bannerIDs = listOf(BuildConfig.AD_BANNER_ID), interstitialIDs = listOf(BuildConfig.AD_INTERSTITIAL_ID), rewardedIDs = emptyList(), requestConsent = true)`. 기획서에 없는 광고 종류는 `emptyList()`. 탭카운터 (`TapCounterApp.kt`, 배너만) · 하루세팅 (`modules/Modules.kt`, 배너 + 전면 + 보상 자리) 이 해당 — 하루세팅의 `one(id)` (빈 값이면 emptyMap) 도구는 필요 없어진다.
 
 ### 검증
 
 - 단위 시험 `full screen ads are not preloaded on configure` · `full screen ad state does not duplicate requests` · `full screen ad state expires old ads` · `full screen ad state presenting and dismiss` · `full screen ad state failure allows retry` · `prepare before configure is ignored` 더함.
 - 단위 시험 `ads start gate waits for consent` · `ads start gate starts only once` · `ads start gate without consent starts immediately` · `ads are not ready for compose before configure` · `banner smaller than slot is centered` · `banner larger than slot is clamped` · `banner unknown size fills slot` (광고) · 버전 비교 · 창 고르기 · 버전 묻기 (요청 모양 / 실패면 null) · 스토어 주소 (네트워크) 더함.
 - `./gradlew testDebugUnitTest assembleRelease` 통과 (광고 22 · 네트워크 14, 앞 요청의 시험 포함).
+- 단위 시험 `placement map from ID list` · `empty ID list means format unused` · `blank ID means no release ID yet` (광고 ID 목록) 더함 / `./gradlew testDebugUnitTest assembleRelease` 통과 (광고 25).
 
 ## [0.9.4] - 2026-08-07
 

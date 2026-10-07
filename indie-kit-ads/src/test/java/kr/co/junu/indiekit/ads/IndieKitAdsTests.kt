@@ -22,6 +22,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -128,6 +129,44 @@ class IndieKitAdsTests {
         assertEquals(
             AdUnitID(),
             IndieKitAds.selectAdUnitID(mapOf("home" to homeID), placement = null, format = "배너")
+        )
+    }
+
+    // ── 광고 ID 목록으로 받기 (2026-10 모듈 초기화 수정) ───────────────────────
+
+    /** 목록의 첫 ID 가 자리 이름 없이 부르는 광고 — "기본 ID" 를 따로 적지 않는다. 두 번째부터는 그 ID 글자로 부른다. */
+    @Test
+    fun `placement map from ID list`() {
+        val map = IndieKitAds.placementMap(listOf("ca-app-pub-1/111", "ca-app-pub-1/222"))!!
+        assertEquals(
+            AdUnitID(release = "ca-app-pub-1/111"),
+            IndieKitAds.selectAdUnitID(map, placement = null, format = "배너")
+        )
+        assertEquals(
+            AdUnitID(release = "ca-app-pub-1/222"),
+            IndieKitAds.selectAdUnitID(map, placement = "ca-app-pub-1/222", format = "배너")
+        )
+        assertEquals(
+            "첫 ID 를 자리 이름으로 넘겨도 같은 ID",
+            AdUnitID(release = "ca-app-pub-1/111"),
+            IndieKitAds.selectAdUnitID(map, placement = "ca-app-pub-1/111", format = "배너")
+        )
+    }
+
+    /** 빈 목록 = 그 종류의 광고를 안 쓰는 앱 → 묶음이 null (resolved* 가 디버그에서도 null — 시험 광고 요청 없음). */
+    @Test
+    fun `empty ID list means format unused`() {
+        assertNull(IndieKitAds.placementMap(emptyList()))
+    }
+
+    /** 빈 글자 ID = 쓰긴 하는데 출시 ID 가 아직 없음 → 출시 ID 는 null (출시 빌드에서 빈 ID 로 요청하지 않음). */
+    @Test
+    fun `blank ID means no release ID yet`() {
+        val map = IndieKitAds.placementMap(listOf("  "))!!
+        assertEquals(
+            "빈 글자가 출시 ID 로 들어가면 출시 빌드에서 빈 ID 로 광고를 요청한다",
+            AdUnitID(release = null),
+            IndieKitAds.selectAdUnitID(map, placement = null, format = "배너")
         )
     }
 

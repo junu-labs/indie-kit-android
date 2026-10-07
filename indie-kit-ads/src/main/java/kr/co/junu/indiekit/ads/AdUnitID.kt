@@ -15,12 +15,12 @@
  *
  * 사용 방법
  *  ```kotlin
+ *  // 앱은 보통 이 그릇을 직접 만들지 않는다 — configure 에 ID 목록을 넘기면 모듈이 담는다 (2026-10).
  *  IndieKitAds.configure(
  *      context = this,
- *      bannerAdUnitIDs = mapOf(
- *          IndieKitAds.DEFAULT_PLACEMENT to AdUnitID(release = "ca-app-pub-..."),
- *          "settings"                    to AdUnitID(release = "ca-app-pub-...-settings")
- *      )
+ *      bannerIDs = listOf("ca-app-pub-..."),
+ *      interstitialIDs = emptyList(),
+ *      rewardedIDs = emptyList()
  *  )
  *  ```
  *
