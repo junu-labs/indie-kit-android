@@ -131,6 +131,80 @@ class IndieKitAdsTests {
         )
     }
 
+    // ── 전면 / 리워드 요청 규칙 (2026-10 광고 일치율 이슈) ─────────────────────
+
+    /** 앱 시작 때 전면 / 리워드를 미리 받지 않는다 — 안 보일 광고 요청이 일치율 · 노출률을 깎았다. */
+    @Test
+    fun `full screen ads are not preloaded on configure`() {
+        assertFalse(FullScreenAdPolicy.PRELOADS_ON_CONFIGURE)
+        assertFalse(FullScreenAdPolicy.RELOADS_AFTER_DISMISS)
+    }
+
+    /** 처음에는 쓸 광고가 없어 요청해야 하고, 요청 중에는 겹쳐 보내지 않는다. */
+    @Test
+    fun `full screen ad state does not duplicate requests`() {
+        val now = 1_000_000L
+        var state = FullScreenAdState()
+        assertFalse(state.isReady(now))
+        assertTrue(state.shouldRequest(now))
+
+        state = state.requested()
+        assertFalse("요청 중에 또 요청하면 안 보일 요청이 하나 더 생긴다", state.shouldRequest(now))
+
+        state = state.loaded(now)
+        assertTrue(state.isReady(now))
+        assertFalse("받아 둔 광고가 있으면 요청하지 않는다", state.shouldRequest(now))
+    }
+
+    /** 받은 지 55분이 넘은 광고는 띄우지 않고 (노출이 안 잡힘) 새로 요청한다. */
+    @Test
+    fun `full screen ad state expires old ads`() {
+        val loadedAt = 1_000_000L
+        val state = FullScreenAdState().requested().loaded(loadedAt)
+
+        val fresh = loadedAt + FullScreenAdState.MAX_AGE_MILLIS - 1
+        assertTrue(state.isReady(fresh))
+        assertFalse(state.isExpired(fresh))
+
+        val old = loadedAt + FullScreenAdState.MAX_AGE_MILLIS + 1
+        assertFalse(state.isReady(old))
+        assertTrue(state.isExpired(old))
+        assertTrue(state.shouldRequest(old))
+        assertTrue("구글의 1시간 만료보다 짧아야 한다", FullScreenAdState.MAX_AGE_MILLIS < 60L * 60L * 1000L)
+    }
+
+    /** 띄우는 중에는 같은 광고를 다시 띄우거나 새로 요청하지 않고, 닫힌 뒤엔 다시 요청할 수 있다. */
+    @Test
+    fun `full screen ad state presenting and dismiss`() {
+        val now = 1_000_000L
+        var state = FullScreenAdState().requested().loaded(now)
+
+        state = state.presenting()
+        assertFalse(state.isReady(now))
+        assertFalse(state.shouldRequest(now))
+
+        state = state.dismissed()
+        assertTrue(state.shouldRequest(now))
+    }
+
+    /** 요청이 실패하면 다음 차례에 다시 요청할 수 있다. */
+    @Test
+    fun `full screen ad state failure allows retry`() {
+        val now = 1_000_000L
+        val state = FullScreenAdState().requested().failed()
+        assertFalse(state.isReady(now))
+        assertTrue(state.shouldRequest(now))
+    }
+
+    /** configure 전에 미리 받기를 불러도 터지지 않고 아무 요청도 하지 않는다. */
+    @Test
+    fun `prepare before configure is ignored`() {
+        IndieKitAds.prepareInterstitial()
+        IndieKitAds.prepareRewarded(placement = "home")
+        assertFalse(IndieKitAds.isInterstitialReady)
+        assertFalse(IndieKitAds.isRewardedReady(placement = "home"))
+    }
+
     /** 자리 이름으로 묻는 적재 상태도 configure 전엔 false. */
     @Test
     fun `before configure ready flags by placement are false`() {

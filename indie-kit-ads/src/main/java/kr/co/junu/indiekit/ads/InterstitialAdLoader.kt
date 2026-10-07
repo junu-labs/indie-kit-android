@@ -2,24 +2,28 @@
  * InterstitialAdLoader.kt — IndieKitAds
  *
  * 역할
- *  - 전면 광고 (interstitial) 의 미리 적재 + 표시 + 닫힘 후 자동 다음 적재.
- *  - iOS 자매 (`InterstitialAdLoader`) 와 같은 흐름 — preload → showIfLoaded → dismiss 콜백 → 다음 preload.
+ *  - 전면 광고 (interstitial) 의 요청 + 표시.
+ *  - iOS 자매 (`InterstitialAdLoader`) 와 같은 흐름 — prepare → showIfLoaded → dismiss 콜백.
  *
  * 주요 개념
  *  - 자리 (placement) 마다 적재기 한 개 — `loader(placement)` 보관소에서 꺼내 쓴다. null 은 기본 자리.
- *  - `preload()` 후 `showIfLoaded(...)` 패턴: 미리 적재해 두고 결정적인 순간에 즉시 표시.
- *  - 광고 닫힘 → 자동으로 다음 광고 적재 → 다음 표시 시점에 또 즉시.
+ *  - **필요할 때만 요청** (2026-10, FullScreenAdState.kt 머리말):
+ *    앱 시작 때 미리 받지 않는다. `prepare()` (앱이 "곧 띄울 것 같다" 고 알려 줌) 또는
+ *    `showIfLoaded` 때 쓸 광고가 없으면 그때 한 개 요청해 다음 차례에 쓴다.
+ *  - 요청 중이면 겹쳐 보내지 않고, 받은 지 55분이 지난 광고는 띄우지 않고 버린다 (노출이 안 잡힘).
  *  - 적재 안 된 상태에서 `showIfLoaded` 호출 시: 즉시 onDismiss 호출 (사용자 흐름 막지 않음).
  *
  * 주의사항
- *  - AdMob 콜백은 메인 스레드 보장 — 추가 Handler 진입 불필요.
- *  - external 노출은 IndieKitAds.showInterstitial 한 곳을 통해서만. 이 class 는 internal.
+ *  - AdMob 콜백은 메인 스레드 보장. prepare / showIfLoaded 도 메인 스레드에서 부른다
+ *    (IndieKitAds 의 공개 함수가 맞춰 준다).
+ *  - external 노출은 IndieKitAds 를 통해서만. 이 class 는 internal.
  */
 
 package kr.co.junu.indiekit.ads
 
 import android.app.Activity
 import android.content.Context
+import android.os.SystemClock
 import kr.co.junu.indiekit.core.AnalyticsBus
 import kr.co.junu.indiekit.core.IKLogger
 import com.google.android.gms.ads.AdError
@@ -58,36 +62,48 @@ internal class InterstitialAdLoader private constructor(
             }
             return loaders.getOrPut(key) { InterstitialAdLoader(placement) }
         }
+
+        /** 기기가 켜진 뒤 흐른 시간 — 사용자가 시계를 바꿔도 흔들리지 않는다. */
+        private fun now(): Long = SystemClock.elapsedRealtime()
     }
 
-    /** 적재된 전면 광고 인스턴스. */
+    /** 적재된 (또는 지금 떠 있는) 전면 광고 인스턴스. */
     @Volatile
     private var ad: InterstitialAd? = null
 
-    /** 광고가 적재 완료 상태인지. */
+    /** 요청 · 적재 · 오래됨 상태 (SDK 와 떨어진 순수 판단). */
+    @Volatile
+    private var state = FullScreenAdState()
+
+    /** 띄울 수 있는 광고가 있는지 (오래된 광고는 아님). */
     val isLoaded: Boolean
-        get() = ad != null
+        get() = ad != null && state.isReady(now())
 
     /** 광고 닫힘 이후 호출할 콜백. */
     private var dismissCallback: (() -> Unit)? = null
 
     // ────────────────────────────────────────────────────────────────────────
-    // 미리 적재
+    // 요청
     // ────────────────────────────────────────────────────────────────────────
 
     /**
-     * 이 자리의 전면 광고 한 개를 미리 적재.
-     * 앱 시작 시 (`IndieKitAds.configure` 안에서) 기본 자리 + 등록한 모든 자리가 자동 호출됨.
-     * 이후 광고 닫힘 콜백에서도 자동 호출되어 다음 광고를 항상 준비된 상태로 유지.
+     * 쓸 광고가 없으면 한 개 요청한다. 요청 중 · 표시 중 · 이미 있으면 아무 일 안 함.
+     * 광고 SDK 시작이 아직 안 끝났으면 끝난 뒤로 미룬다. 메인 스레드에서 부른다.
      */
-    fun preload(context: Context) {
-        // 출시 빌드인데 운영 ID 가 없으면 null — 적재하지 않는다. isLoaded 가 false 라 showIfLoaded 는 즉시 통과.
-        val adUnitID = IndieKitAds.resolvedInterstitialAdUnitID(context, placement)
-        if (adUnitID == null) {
-            IKLogger.ads.debug("전면 광고 ID 없음 — 적재 안 함")
-            ad = null
+    fun prepare(context: Context) {
+        if (!state.shouldRequest(now())) return
+        if (!IndieKitAds.isSdkReady) {
+            IndieKitAds.runAfterSdkReady { prepare(context) }
             return
         }
+        // 출시 빌드인데 운영 ID 가 없으면 null — 요청하지 않는다. isLoaded 가 false 라 showIfLoaded 는 즉시 통과.
+        val adUnitID = IndieKitAds.resolvedInterstitialAdUnitID(context, placement)
+        if (adUnitID == null) {
+            IKLogger.ads.debug("전면 광고 ID 없음 — 요청 안 함")
+            return
+        }
+        ad = null
+        state = state.requested()
         InterstitialAd.load(
             context.applicationContext,
             adUnitID,
@@ -96,12 +112,14 @@ internal class InterstitialAdLoader private constructor(
                 override fun onAdLoaded(loaded: InterstitialAd) {
                     ad = loaded
                     loaded.fullScreenContentCallback = makeFullScreenCallback(context)
+                    state = state.loaded(now())
                     IKLogger.ads.info("전면 광고 적재 성공 (자리: ${placement ?: "기본"})")
                     AnalyticsBus.record("ad_loaded", adAnalyticsParams("interstitial", placement))
                 }
 
                 override fun onAdFailedToLoad(error: LoadAdError) {
                     ad = null
+                    state = state.failed()
                     IKLogger.ads.warning("전면 광고 적재 실패: ${error.message}")
                 }
             }
@@ -113,20 +131,29 @@ internal class InterstitialAdLoader private constructor(
     // ────────────────────────────────────────────────────────────────────────
 
     /**
-     * 광고가 적재되어 있으면 표시. 없으면 즉시 onDismiss 호출.
+     * 광고가 적재되어 있으면 표시. 없으면 즉시 onDismiss 호출하고, 다음 차례에 쓸 광고를 요청.
      *
      * @param activity 광고를 띄울 Activity. iOS 와 달리 안드로이드는 자동 탐색 없음 — 명시 필수.
      * @param onDismiss 광고 닫힘 후 (또는 광고 없음 시 즉시) 실행할 콜백.
      */
     fun showIfLoaded(activity: Activity, onDismiss: () -> Unit) {
         val current = ad
-        if (current == null) {
-            IKLogger.ads.debug("전면 광고 미적재 — 흐름 통과")
+        val nowMillis = now()
+        if (current == null || !state.isReady(nowMillis)) {
+            if (state.isExpired(nowMillis)) {
+                IKLogger.ads.info("전면 광고가 오래됨 (55분 넘음) — 버리고 새로 요청")
+                state = state.discarded()
+                ad = null
+            } else {
+                IKLogger.ads.debug("전면 광고 미적재 — 흐름 통과, 다음 차례용 요청")
+            }
+            prepare(activity.applicationContext)
             onDismiss()
             return
         }
         dismissCallback = onDismiss
-        ad = null  // 같은 광고를 두 번 띄우지 않도록 즉시 비우기.
+        state = state.presenting()  // 같은 광고를 두 번 띄우지 않도록 즉시 비우기.
+        ad = null
         current.show(activity)
         IKLogger.ads.info("전면 광고 표시")
     }
@@ -134,6 +161,15 @@ internal class InterstitialAdLoader private constructor(
     // ────────────────────────────────────────────────────────────────────────
     // 내부 콜백
     // ────────────────────────────────────────────────────────────────────────
+
+    /** 닫힘 / 표시 실패 뒤 정리 — 사용자 콜백을 부른다. 다음 광고는 다음 차례에 (FullScreenAdPolicy). */
+    private fun finishPresentation(context: Context) {
+        state = state.dismissed()
+        val callback = dismissCallback
+        dismissCallback = null
+        if (FullScreenAdPolicy.RELOADS_AFTER_DISMISS) prepare(context)
+        callback?.invoke()
+    }
 
     private fun makeFullScreenCallback(context: Context): FullScreenContentCallback {
         return object : FullScreenContentCallback() {
@@ -143,19 +179,12 @@ internal class InterstitialAdLoader private constructor(
 
             override fun onAdDismissedFullScreenContent() {
                 AnalyticsBus.record("ad_dismissed", adAnalyticsParams("interstitial", placement))
-                val callback = dismissCallback
-                dismissCallback = null
-                // 다음 광고 미리 적재.
-                preload(context)
-                callback?.invoke()
+                finishPresentation(context)
             }
 
             override fun onAdFailedToShowFullScreenContent(error: AdError) {
                 IKLogger.ads.warning("전면 광고 표시 실패: ${error.message}")
-                val callback = dismissCallback
-                dismissCallback = null
-                preload(context)
-                callback?.invoke()
+                finishPresentation(context)
             }
         }
     }

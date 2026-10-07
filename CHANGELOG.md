@@ -4,6 +4,27 @@
 
 자매 저장소: [`indie-kit-ios`](https://github.com/junu-labs/indie-kit-ios). iOS 와 단계 번호가 1:1 대칭이며, 같은 단계라도 데모 검증 시점이 다르면 태그 번호가 어긋날 수 있다.
 
+## [Unreleased]
+
+### 고침 (광고 — AdMob 보고서에서 노출 / 요청 50% 미만, 일치율 60%대로 나온 건에서 출발)
+
+- **안 보일 전면 · 리워드 광고를 켤 때마다 요청하던 문제.** `configure` 뒤 SDK 준비가 끝나면 등록한 전면 · 리워드 자리를 모두 미리 받아 두었다. 그런데 앱은 전면 광고를 "성취 순간" 같은 드문 때에만 띄우므로 대부분의 실행에서 받아 둔 광고가 한 번도 안 보이고 버려졌고, AdMob 에는 요청만 쌓여 노출률 · 일치율이 낮게 잡혔다. 이제 **켤 때 미리 받지 않는다.** 앱이 `showInterstitial` / `showRewarded` 를 불렀을 때 받아 둔 광고가 없으면 그 차례는 건너뛰고 (흐름은 예전처럼 곧바로 이어짐) 다음 차례에 쓸 광고를 그때 요청한다. 광고가 닫힌 뒤 곧바로 다음 광고를 받던 것도 멈췄다 — 다음 차례가 올 때 받는다.
+- **오래된 광고를 띄우던 문제.** 구글 기준으로 받은 지 1시간이 지난 전면 · 리워드 광고는 띄워도 노출로 잡히지 않는다. 이제 받은 지 55분이 넘은 광고는 띄우지 않고 버린 뒤 새로 요청한다 (기기 켜진 뒤 시간으로 재므로 시계를 바꿔도 흔들리지 않음).
+- **같은 자리에 요청이 겹칠 수 있던 문제.** 요청 중 · 표시 중에는 새 요청을 보내지 않는다. SDK 시작 (뒷실) 이 아직 안 끝났으면 요청을 끝난 뒤로 미룬다.
+
+### 추가
+
+- `IndieKitAds.prepareInterstitial(placement)` / `IndieKitAds.prepareRewarded(placement)` — 띄울 차례가 가까울 때 앱이 불러 미리 받아 둔다 (예: 오늘 할 일이 하나 남았을 때, "광고 보고 받기" 단추가 있는 화면이 열릴 때). 어느 실에서 불러도 되고, 여러 번 불러도 요청은 한 번. 앱 시작 직후처럼 띄울지 모를 때 부르면 일치율이 다시 떨어지므로 그때는 부르지 않는다.
+
+### 앱에서 바꿀 것
+
+- 꼭 바꿀 것은 없다 — 고치지 않아도 빌드되고 돈다. 다만 그대로 두면 **각 실행의 첫 전면 광고 차례는 건너뛴다** (그때 받아 두고 다음 차례에 띄움). 첫 차례부터 띄우려면 띄울 차례 바로 앞 단계에서 `prepareInterstitial()` 을 부른다. 리워드 광고를 쓰는 앱은 단추가 있는 화면이 열릴 때 `prepareRewarded()` 를 부른다 (안 부르면 첫 단추 누름에 보상이 null).
+- 쓰지 않는 리워드 ID 를 `rewardedAdUnitIDs` 에 넣어 둔 앱도 이제 요청이 나가지 않는다 (예전엔 켤 때마다 나갔다).
+
+### 검증
+
+- 단위 시험 `full screen ads are not preloaded on configure` · `full screen ad state does not duplicate requests` · `full screen ad state expires old ads` · `full screen ad state presenting and dismiss` · `full screen ad state failure allows retry` · `prepare before configure is ignored` 더함. (이번 작업 환경에 Java 가 없어 담당이 직접 돌리지 못함 — 공장 빌드에서 확인.)
+
 ## [0.9.4] - 2026-08-07
 
 ### 고침 (광고 — TouchCart 에뮬레이터 검사에서 유럽 동의창이 한 번도 안 뜨는 건에서 출발)

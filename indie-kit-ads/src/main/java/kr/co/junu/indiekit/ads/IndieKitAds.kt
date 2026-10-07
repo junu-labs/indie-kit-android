@@ -37,10 +37,16 @@
  *      NativeAdView(modifier = Modifier.fillMaxWidth())
  *  }
  *
- *  // 운동 완료 시점:
+ *  // 운동 마지막 세트에 들어갈 때 (띄울 차례가 가까울 때만 — 앱 시작 때 부르지 않는다):
+ *  IndieKitAds.prepareInterstitial()
+ *
+ *  // 운동 완료 시점 (받아 둔 광고가 없으면 건너뛰고, 다음 차례용으로 받아 둔다):
  *  IndieKitAds.showInterstitial(activity) {
  *      // 광고 닫힘 후 실행
  *  }
+ *
+ *  // "광고 보고 힌트 받기" 단추가 있는 화면이 열릴 때:
+ *  IndieKitAds.prepareRewarded()
  *
  *  // 사용자가 "광고 보고 힌트 받기" 눌렀을 때:
  *  IndieKitAds.showRewarded(activity) { reward ->
@@ -152,7 +158,10 @@ public object IndieKitAds {
      *  1. 광고 ID 보관 (자리 이름 → 출시 ID 묶음). 부른 실에서 곧바로 끝난다.
      *  2. `requestConsent` 가 true 이면 UMP 동의창 흐름 예약 (EEA 사용자에 한해 동의창 노출).
      *  3. MobileAds.initialize 호출 (AdMob SDK 시작) — **뒷실에서**.
-     *  4. SDK 준비가 끝나면 전면 / 리워드 광고 미리 적재 (preload) — 앱이 등록한 자리만, 화면 그리는 실에서.
+     *
+     * 전면 / 리워드 광고는 여기서 **미리 받지 않는다** (2026-10 — 안 보일 광고 요청이 일치율 · 노출률을 깎았다).
+     * 띄울 차례가 가까우면 [prepareInterstitial] / [prepareRewarded] 를 부르거나,
+     * 그냥 [showInterstitial] 을 부르면 처음엔 건너뛰고 다음 차례용으로 받아 둔다.
      *
      * 실 (스레드) 규칙
      *  - 이 함수는 **화면 그리는 실에서 그대로 불러도 된다.** 오래 걸리는 일 (SDK 시작) 은
@@ -233,25 +242,90 @@ public object IndieKitAds {
                 IKLogger.ads.info("MobileAds.initialize 완료")
                 // 광고를 불러오는 일은 화면 그리는 실에서 한다 (구글 광고 묶음 규칙).
                 // 위에서 뒷실로 옮겼으므로 여기서 화면 그리는 실로 되돌린다.
-                Handler(Looper.getMainLooper()).post { preloadRegisteredPlacements(appCtx) }
+                Handler(Looper.getMainLooper()).post { onSdkReady(appCtx) }
             }
         }, "indie-kit-ads-init").start()
     }
 
+    // ────────────────────────────────────────────────────────────────────────
+    // SDK 시작 뒤로 미루기 (화면 그리는 실에서만 만진다)
+    // ────────────────────────────────────────────────────────────────────────
+
+    /** MobileAds.initialize 가 끝났는지. */
+    @Volatile
+    internal var isSdkReady: Boolean = false
+        private set
+
+    /** SDK 시작 전에 들어온 요청 — 시작 뒤 한 번에 처리. */
+    private val afterSdkReady = mutableListOf<() -> Unit>()
+
+    /** SDK 가 준비돼 있으면 곧바로, 아니면 준비 뒤에 한 번 실행. 화면 그리는 실에서 부른다. */
+    internal fun runAfterSdkReady(work: () -> Unit) {
+        if (isSdkReady) { work(); return }
+        afterSdkReady += work
+    }
+
     /**
-     * 전면 / 리워드 광고를 미리 적재한다 — **앱이 실제로 등록한 자리만.**
+     * SDK 준비 끝. 미뤄 둔 요청을 처리한다.
      *
-     * 등록 안 한 기본 자리까지 부르지 않는 까닭: 시험용 (디버그) 빌드에서는 [AdUnitID.resolve] 가
-     * 등록 여부와 상관없이 늘 구글 시험용 번호를 채운다. 그래서 예전 짜임에서는 앱이 쓰지도 않는
-     * 전면 광고를 켤 때마다 불러왔다 — 앱 켜는 순간에 쓸데없는 그물 요청이 얹혔다.
+     * 전면 / 리워드는 켤 때 미리 받지 않는다 ([FullScreenAdPolicy.PRELOADS_ON_CONFIGURE]).
+     * 예전에는 여기서 등록한 자리를 모두 받아 두었는데, 대부분의 실행에서 한 번도 안 보여
+     * AdMob 의 요청 수만 늘고 노출 / 일치율이 낮게 잡혔다.
      */
-    private fun preloadRegisteredPlacements(appCtx: Context) {
-        interstitialAdUnitIDs.keys.forEach { placement ->
-            InterstitialAdLoader.loader(placement).preload(appCtx)
+    private fun onSdkReady(appCtx: Context) {
+        isSdkReady = true
+        val pending = afterSdkReady.toList()
+        afterSdkReady.clear()
+        pending.forEach { it() }
+
+        if (FullScreenAdPolicy.PRELOADS_ON_CONFIGURE) {
+            interstitialAdUnitIDs.keys.forEach { InterstitialAdLoader.loader(it).prepare(appCtx) }
+            rewardedAdUnitIDs.keys.forEach { RewardedAdLoader.loader(it).prepare(appCtx) }
         }
-        rewardedAdUnitIDs.keys.forEach { placement ->
-            RewardedAdLoader.loader(placement).preload(appCtx)
+    }
+
+    /** 화면 그리는 실에서 실행 — 이미 그 실이면 곧바로. */
+    private fun onMain(work: () -> Unit) {
+        if (Looper.myLooper() == Looper.getMainLooper()) work()
+        else Handler(Looper.getMainLooper()).post(work)
+    }
+
+    // ────────────────────────────────────────────────────────────────────────
+    // 미리 받기 (앱이 고르는 때)
+    // ────────────────────────────────────────────────────────────────────────
+
+    /**
+     * 전면 광고를 곧 띄울 것 같을 때 미리 받아 둔다 — 띄울 차례에 바로 뜨게.
+     *
+     * 예: 오늘 할 일이 하나 남았을 때, 마지막 단계 화면이 열릴 때.
+     * 이미 받아 뒀거나 받는 중이면 아무 일 안 한다 (여러 번 불러도 요청은 한 번).
+     * 앱 시작 직후처럼 "띄울지 모를 때" 부르면 안 보일 광고를 요청하게 되어 일치율이 다시 떨어진다.
+     * 어느 실에서 불러도 된다.
+     *
+     * @param placement configure 의 `interstitialAdUnitIDs` 에 등록한 자리 이름. null 이면 기본 자리.
+     */
+    public fun prepareInterstitial(placement: String? = null) {
+        val ctx = appContext
+        if (!initializedFlag || ctx == null) {
+            IKLogger.ads.warning("IndieKitAds.configure 전에 prepareInterstitial — 무시합니다.")
+            return
         }
+        onMain { InterstitialAdLoader.loader(placement).prepare(ctx) }
+    }
+
+    /**
+     * 리워드 광고를 미리 받아 둔다 — "광고 보고 받기" 단추가 있는 화면이 열릴 때 부른다.
+     * 어느 실에서 불러도 된다.
+     *
+     * @param placement configure 의 `rewardedAdUnitIDs` 에 등록한 자리 이름. null 이면 기본 자리.
+     */
+    public fun prepareRewarded(placement: String? = null) {
+        val ctx = appContext
+        if (!initializedFlag || ctx == null) {
+            IKLogger.ads.warning("IndieKitAds.configure 전에 prepareRewarded — 무시합니다.")
+            return
+        }
+        onMain { RewardedAdLoader.loader(placement).prepare(ctx) }
     }
 
     /**
@@ -318,7 +392,8 @@ public object IndieKitAds {
     // ────────────────────────────────────────────────────────────────────────
 
     /**
-     * 전면 광고가 미리 적재되어 있으면 표시. 없으면 즉시 onDismiss 호출.
+     * 전면 광고가 받아져 있으면 표시. 없으면 즉시 onDismiss 호출하고, 다음 차례에 쓸 광고를 그때 요청한다.
+     * (첫 차례부터 띄우려면 그 전에 [prepareInterstitial] 을 불러 둔다.)
      *
      * @param activity 광고를 띄울 Activity.
      * @param placement configure 의 `interstitialAdUnitIDs` 에 등록한 자리 이름. null 이면 기본 자리.
@@ -337,7 +412,8 @@ public object IndieKitAds {
     }
 
     /**
-     * 리워드 광고가 미리 적재되어 있으면 표시. 사용자가 끝까지 시청하면 보상.
+     * 리워드 광고가 받아져 있으면 표시. 사용자가 끝까지 시청하면 보상.
+     * 없으면 null 로 즉시 onResult 하고 다음 차례용으로 요청한다 — 단추가 있는 화면에서 [prepareRewarded] 를 먼저 부른다.
      *
      * @param activity 광고를 띄울 Activity.
      * @param placement configure 의 `rewardedAdUnitIDs` 에 등록한 자리 이름. null 이면 기본 자리.
