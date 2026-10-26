@@ -342,4 +342,78 @@ class IndieKitAdsTests {
         assertNotEquals(eea, notEea)
         assertEquals(listOf("ABCD1234"), notEea.testDeviceHashedIds)
     }
+
+    // ── 일치율 — 실패 뒤 곧바로 다시 요청하지 않기 (2026-10) ─────────────────────
+
+    /** 채울 광고가 없어 실패하면 30초 동안은 다시 요청하지 않는다 (예전엔 곧바로 다시 요청해 "일치 안 됨" 요청이 쌓였다). */
+    @Test
+    fun `full screen ad state backs off after failure`() {
+        val t0 = 1_000_000L
+        val state = FullScreenAdState().requested().failed(t0)
+        assertFalse("실패 직후 다시 요청하면 일치율이 떨어진다", state.shouldRequest(t0))
+        assertFalse(state.shouldRequest(t0 + 29_999L))
+        assertTrue(state.shouldRequest(t0 + 30_000L))
+    }
+
+    /** 잇달아 실패할수록 더 오래 기다리고 (30초 · 1분 · 2분 …), 10분을 넘지 않는다. 받으면 처음으로. */
+    @Test
+    fun `full screen ad state backoff grows and resets on load`() {
+        assertEquals(30_000L, FullScreenAdState.retryDelayMillis(1))
+        assertEquals(60_000L, FullScreenAdState.retryDelayMillis(2))
+        assertEquals(120_000L, FullScreenAdState.retryDelayMillis(3))
+        assertEquals(600_000L, FullScreenAdState.retryDelayMillis(6))
+        assertEquals(600_000L, FullScreenAdState.retryDelayMillis(50))
+
+        var t = 1_000_000L
+        var state = FullScreenAdState().requested().failed(t)
+        t += 30_000L
+        state = state.requested().failed(t)
+        assertFalse(state.shouldRequest(t + 59_999L))
+        assertTrue(state.shouldRequest(t + 60_000L))
+
+        state = state.requested().loaded(t + 61_000L)
+        assertEquals(0, state.failureCount)
+        state = state.presenting().dismissed().requested().failed(t + 100_000L)
+        assertTrue("받은 뒤의 첫 실패는 다시 30초부터", state.shouldRequest(t + 130_000L))
+    }
+
+    /** 받아서 곧바로 띄우기 — 받음 · 실패 · 시간 넘김 중 먼저 온 하나만 친다 (두 번 띄우거나 두 번 끝내지 않게). */
+    @Test
+    fun `load and show wait finishes once`() {
+        val loadedFirst = LoadAndShowWait()
+        assertEquals(LoadAndShowWait.Outcome.SHOW, loadedFirst.adLoaded())
+        assertNull("띄운 뒤 시간 넘김이 와도 onDismiss 를 또 부르지 않는다", loadedFirst.timedOut())
+
+        val timeoutFirst = LoadAndShowWait()
+        assertEquals(LoadAndShowWait.Outcome.GIVE_UP, timeoutFirst.timedOut())
+        assertNull("시간 넘긴 뒤 온 광고는 띄우지 않는다 (다음 차례에 씀)", timeoutFirst.adLoaded())
+
+        val failed = LoadAndShowWait()
+        assertEquals(LoadAndShowWait.Outcome.GIVE_UP, failed.adFailed())
+        assertTrue(failed.isFinished)
+    }
+
+    // ── 배너 — 좁은 소재일 때 광고 안쪽 검은 띠 (2026-10, 터치카트 시험 38) ─────────
+
+    /** 기본은 표준 320×50 고정 — 폭 맞춤으로 자리 폭 (411) 을 요청하면 좁은 소재 둘레가 검게 칠해졌다. */
+    @Test
+    fun `banner requests standard size by default`() {
+        assertEquals(BannerRequest.STANDARD, BannerRequest.forSlot(411, adaptive = false))
+        assertEquals(BannerRequest.STANDARD, BannerRequest.forSlot(320, adaptive = false))
+        assertFalse(BannerRequest.STANDARD.adaptive)
+        assertEquals(320, BannerRequest.STANDARD.widthDp)
+    }
+
+    /** 320 보다 좁은 자리, 폭 맞춤을 고른 앱은 자리 폭 그대로 폭 맞춤. */
+    @Test
+    fun `banner request adaptive when narrow or chosen`() {
+        assertEquals(BannerRequest(300, adaptive = true), BannerRequest.forSlot(300, adaptive = false))
+        assertEquals(BannerRequest(411, adaptive = true), BannerRequest.forSlot(411, adaptive = true))
+    }
+
+    /** 고정 크기는 회전해 자리 폭이 바뀌어도 같은 요청 — AdView 를 다시 만들지 않는다. */
+    @Test
+    fun `banner standard request stable across rotation`() {
+        assertEquals(BannerRequest.forSlot(411, adaptive = false), BannerRequest.forSlot(914, adaptive = false))
+    }
 }

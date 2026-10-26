@@ -22,6 +22,9 @@
  *  - 둘레 투명 (2026-10): AdView 는 받은 광고 크기만큼만, 자리 가운데에 둔다. 남는 곳은 투명이라
  *    앱이 칠한 광고 자리 바탕색이 보인다 — 검은 띠 없음 (`BannerContainerLayout`, `BannerLayout`).
  *  - 동의 먼저 (2026-10): 광고 SDK 가 유럽 동의 확인 뒤 시작될 때까지 광고를 요청하지 않는다.
+ *  - 기본은 표준 320×50 고정 (2026-10 뒤): 폭 맞춤으로 요청하면 칸보다 좁은 소재가 올 때 AdView 안쪽 WebView 가
+ *    남는 곳을 검게 칠했다 (터치카트 3.3.2 시험, 유튜브 시험 소재). 고정 크기 요청엔 꼭 맞는 소재만 온다.
+ *    자리가 320dp 보다 좁을 때와 `adaptive = true` 를 고른 앱만 위의 폭 맞춤을 쓴다 (`BannerRequest`).
  *
  * 사용 방법
  *  ```kotlin
@@ -85,9 +88,12 @@ private const val WIDTH_SETTLE_MS = 200L
  *                 높이는 안 적으면 AdView 가 자기 광고 크기 (50dp 이하) 만큼 차지.
  * @param placement configure 의 `bannerAdUnitIDs` 에 등록한 자리 이름 (예: "home").
  *                  생략하면 기본 배너 ID 사용.
+ * @param adaptive false (기본, 2026-10 뒤) = 표준 320×50 고정 — 어떤 소재가 와도 광고 안쪽 검은 띠가 없다.
+ *                 true = 자리 폭 그대로 폭 맞춤 (예전 동작 — 좁은 소재가 오면 광고 안쪽에 검은 띠가 생길 수 있다).
+ *                 자리가 320dp 보다 좁으면 어느 쪽이든 그 폭의 폭 맞춤.
  */
 @Composable
-public fun BannerAdView(modifier: Modifier = Modifier, placement: String? = null) {
+public fun BannerAdView(modifier: Modifier = Modifier, placement: String? = null, adaptive: Boolean = false) {
     val context = LocalContext.current
 
     // configure 안 한 상태면 placeholder Box — 광고 미표시.
@@ -131,19 +137,25 @@ public fun BannerAdView(modifier: Modifier = Modifier, placement: String? = null
         // 폭이 아직 정해지기 전에는 배너를 만들지 않는다 —
         // 0 폭으로 광고를 적재했다가 곧바로 다시 적재하는 낭비 방지.
         if (adWidthDp > 0) {
-            // 자리 이름 또는 폭이 바뀌면 key 가 subtree 를 통째로 새로 만들어,
+            // 요청 크기 — 기본은 표준 320×50 고정 (좁은 소재가 와도 안쪽 검은 띠 없음, BannerRequest 머리말).
+            val request = BannerRequest.forSlot(adWidthDp, adaptive)
+            // 자리 이름 또는 요청 크기가 바뀌면 key 가 subtree 를 통째로 새로 만들어,
             // 새 AdView 가 새 크기 / 새 ID 로 다시 적재되고 옛 AdView 는 onDispose 에서 정리됨.
-            // (AdView 는 광고 크기를 한 번 정하면 바꿀 수 없어, 폭 변경 = AdView 재생성이다.)
-            key(placement, adWidthDp) {
+            // (AdView 는 광고 크기를 한 번 정하면 바꿀 수 없어, 크기 변경 = AdView 재생성이다.)
+            // 고정 320×50 이면 회전해 폭이 바뀌어도 같은 요청이라 다시 적재하지 않는다.
+            key(placement, request) {
                 val adView = remember {
                     AdView(context).apply {
                         // 바탕 투명 — 광고가 AdView 보다 작게 그려져도 남는 곳이 검게 보이지 않게.
                         setBackgroundColor(Color.TRANSPARENT)
-                        setAdSize(AdSize.getInlineAdaptiveBannerAdSize(adWidthDp, BANNER_MAX_HEIGHT_DP))
+                        setAdSize(
+                            if (request.adaptive) AdSize.getInlineAdaptiveBannerAdSize(request.widthDp, BANNER_MAX_HEIGHT_DP)
+                            else AdSize.BANNER
+                        )
                         adUnitId = adUnitID
                         adListener = object : AdListener() {
                             override fun onAdLoaded() {
-                                IKLogger.ads.info("배너 광고 적재 성공 (자리: ${placement ?: "기본"}, 폭: ${adWidthDp}dp)")
+                                IKLogger.ads.info("배너 광고 적재 성공 (자리: ${placement ?: "기본"}, 요청: ${request.widthDp}dp${if (request.adaptive) " 폭 맞춤" else " 고정"})")
                                 // 받은 광고의 실제 크기로 다시 재고 가운데 자리를 잡는다.
                                 requestLayout()
                                 AnalyticsBus.record("ad_loaded", adAnalyticsParams("banner", placement))

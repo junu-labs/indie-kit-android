@@ -49,6 +49,10 @@
  *  IndieKitAds.showRewarded(activity) { reward ->
  *      if (reward != null) hintCount += reward.amount
  *  }
+ *
+ *  // (2026-10) 드문 차례에는 미리 받지 말고 누른 순간 받아서 띄운다 — 버려지는 요청이 없다:
+ *  IndieKitAds.loadAndShowRewarded(activity) { reward -> … }   // 못 받으면 (8초) null
+ *  IndieKitAds.loadAndShowInterstitial(activity) { … }         // 못 받으면 (5초) 건너뜀
  *  ```
  *
  * 주의사항
@@ -557,6 +561,66 @@ public object IndieKitAds {
             return
         }
         RewardedAdLoader.loader(placement).showIfLoaded(activity, onResult)
+    }
+
+    // ────────────────────────────────────────────────────────────────────────
+    // 받아서 곧바로 띄우기 (2026-10 — 일치율 · 노출률)
+    // ────────────────────────────────────────────────────────────────────────
+
+    /**
+     * 전면 광고를 **지금** 받아서 받는 대로 띄운다. 받아 둔 광고가 있으면 곧바로 띄운다.
+     *
+     * [showInterstitial] 은 받아 둔 광고가 없으면 그 차례를 건너뛰고 "다음 차례용" 광고를 요청하는데,
+     * 다음 차례가 안 오면 (예: 하루 두 번째 레시피를 안 부름) 그 요청은 보여지지 않고 버려진다.
+     * 드물게 오는 차례 (유료 기능 앞 · 하루 한두 번) 에는 이 함수를 쓴다 — 요청한 광고는 받으면 곧바로 보여지고,
+     * 다음 차례용으로 미리 받지 않는다. [prepareInterstitial] 도 부르지 않는다.
+     *
+     * 받는 동안 (보통 1~2초) 앱은 흐름을 멈추고 "잠시만요" 같은 모습을 보이다가 onDismiss 에서 이어 간다.
+     * [timeoutMillis] 안에 못 받거나 받기에 실패하면 띄우지 않고 onDismiss — 흐름은 막히지 않는다.
+     * 방금 받기에 실패했으면 (채울 광고 없음) 잠시 (30초 ~ 10분) 다시 요청하지 않고 곧바로 onDismiss.
+     * 어느 실에서 불러도 된다 (콜백은 화면 그리는 실).
+     *
+     * @param activity 광고를 띄울 Activity.
+     * @param placement 전면 광고 자리 이름. null 이면 기본 자리.
+     * @param timeoutMillis 광고를 기다리는 가장 긴 시간. 기본 5초.
+     * @param onDismiss 광고 닫힘 후 (또는 못 받아 건너뛸 때) 실행할 콜백.
+     */
+    public fun loadAndShowInterstitial(
+        activity: Activity,
+        placement: String? = null,
+        timeoutMillis: Long = 5_000L,
+        onDismiss: () -> Unit = {}
+    ) {
+        if (!ensureConfigured()) {
+            onDismiss()
+            return
+        }
+        onMain { InterstitialAdLoader.loader(placement).loadAndShow(activity, timeoutMillis, onDismiss) }
+    }
+
+    /**
+     * 리워드 광고를 **지금** 받아서 받는 대로 띄운다 — "광고 보고 받기" 단추를 누른 순간에 부른다.
+     *
+     * 단추가 있는 화면이 열릴 때 [prepareRewarded] 로 미리 받아 두면 사용자가 단추를 안 누를 때마다
+     * 받은 광고가 버려진다. 이 함수를 쓰면 누른 사람에게만 요청하므로 요청한 광고가 (받으면) 모두 보여진다.
+     * 받는 동안 앱은 단추를 "불러오는 중" 으로 두고, onResult 에서 결과를 본다.
+     *
+     * @param activity 광고를 띄울 Activity.
+     * @param placement 리워드 광고 자리 이름. null 이면 기본 자리.
+     * @param timeoutMillis 광고를 기다리는 가장 긴 시간. 기본 8초.
+     * @param onResult 끝까지 봤으면 AdReward, 중간에 닫음 · 못 받음 · 시간 넘김이면 null.
+     */
+    public fun loadAndShowRewarded(
+        activity: Activity,
+        placement: String? = null,
+        timeoutMillis: Long = 8_000L,
+        onResult: (AdReward?) -> Unit
+    ) {
+        if (!ensureConfigured()) {
+            onResult(null)
+            return
+        }
+        onMain { RewardedAdLoader.loader(placement).loadAndShow(activity, timeoutMillis, onResult) }
     }
 
     /**

@@ -90,18 +90,35 @@ internal class InterstitialAdLoader private constructor(
      * 쓸 광고가 없으면 한 개 요청한다. 요청 중 · 표시 중 · 이미 있으면 아무 일 안 함.
      * 광고 SDK 시작이 아직 안 끝났으면 끝난 뒤로 미룬다. 메인 스레드에서 부른다.
      */
-    fun prepare(context: Context) {
-        if (!state.shouldRequest(now())) return
+    fun prepare(context: Context) = prepare(context, null)
+
+    /** 받기 결과를 기다리는 쪽 (`loadAndShow`). true = 받음, false = 못 받음. 화면 그리는 실에서만 만진다. */
+    private val loadWaiters = mutableListOf<(Boolean) -> Unit>()
+
+    /** [prepare] + 결과 알림. 이미 받아 둔 광고가 있으면 곧바로 true, 요청을 못 보내면 곧바로 false. */
+    private fun prepare(context: Context, waiter: ((Boolean) -> Unit)?) {
+        if (isLoaded) { waiter?.invoke(true); return }
+        if (state.isLoading) { waiter?.let { loadWaiters += it }; return }
+        val nowMillis = now()
+        if (!state.shouldRequest(nowMillis)) {
+            if (state.isBackingOff(nowMillis)) IKLogger.ads.debug("전면 광고 — 방금 실패해 잠시 다시 요청하지 않음")
+            waiter?.invoke(false)
+            return
+        }
         if (!IndieKitAds.isSdkReady) {
-            IndieKitAds.runAfterSdkReady { prepare(context) }
+            waiter?.let { loadWaiters += it }
+            IndieKitAds.runAfterSdkReady { prepare(context, null) }
             return
         }
         // 출시 빌드인데 운영 ID 가 없으면 null — 요청하지 않는다. isLoaded 가 false 라 showIfLoaded 는 즉시 통과.
         val adUnitID = IndieKitAds.resolvedInterstitialAdUnitID(context, placement)
         if (adUnitID == null) {
             IKLogger.ads.debug("전면 광고 ID 없음 — 요청 안 함")
+            waiter?.invoke(false)
+            flushWaiters(false)
             return
         }
+        waiter?.let { loadWaiters += it }
         ad = null
         state = state.requested()
         InterstitialAd.load(
@@ -115,15 +132,53 @@ internal class InterstitialAdLoader private constructor(
                     state = state.loaded(now())
                     IKLogger.ads.info("전면 광고 적재 성공 (자리: ${placement ?: "기본"})")
                     AnalyticsBus.record("ad_loaded", adAnalyticsParams("interstitial", placement))
+                    flushWaiters(true)
                 }
 
                 override fun onAdFailedToLoad(error: LoadAdError) {
                     ad = null
-                    state = state.failed()
+                    state = state.failed(now())
                     IKLogger.ads.warning("전면 광고 적재 실패: ${error.message}")
+                    flushWaiters(false)
                 }
             }
         )
+    }
+
+    private fun flushWaiters(ok: Boolean) {
+        val waiters = loadWaiters.toList()
+        loadWaiters.clear()
+        waiters.forEach { it(ok) }
+    }
+
+    // ────────────────────────────────────────────────────────────────────────
+    // 받아서 곧바로 띄우기
+    // ────────────────────────────────────────────────────────────────────────
+
+    /**
+     * 받아 둔 광고가 있으면 곧바로 띄우고, 없으면 지금 요청해 받는 대로 띄운다. 화면 그리는 실에서 부른다.
+     * [timeoutMillis] 안에 못 받거나 받기에 실패하면 띄우지 않고 onDismiss. 늦게 온 광고는 다음 차례에 쓴다.
+     * 다음 차례용으로 미리 받지 않는다 — 요청한 광고는 (받으면) 곧바로 보여지므로 버려지는 요청이 없다.
+     */
+    fun loadAndShow(activity: Activity, timeoutMillis: Long, onDismiss: () -> Unit) {
+        if (isLoaded) { showIfLoaded(activity, onDismiss); return }
+        val wait = LoadAndShowWait()
+        prepare(activity.applicationContext) { ok ->
+            when (if (ok) wait.adLoaded() else wait.adFailed()) {
+                LoadAndShowWait.Outcome.SHOW ->
+                    if (isLoaded && !activity.isFinishing && !activity.isDestroyed) showIfLoaded(activity, onDismiss)
+                    else onDismiss()
+                LoadAndShowWait.Outcome.GIVE_UP -> onDismiss()
+                null -> Unit
+            }
+        }
+        if (wait.isFinished) return
+        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+            if (wait.timedOut() != null) {
+                IKLogger.ads.info("전면 광고 — ${timeoutMillis}ms 안에 못 받아 이번엔 건너뜀")
+                onDismiss()
+            }
+        }, timeoutMillis.coerceAtLeast(0L))
     }
 
     // ────────────────────────────────────────────────────────────────────────

@@ -25,6 +25,10 @@ internal data class FullScreenAdState(
     val isLoading: Boolean = false,
     /** 지금 화면에 떠 있는지 (닫힐 때까지 새 요청을 보내지 않는다). */
     val isPresenting: Boolean = false,
+    /** 잇달아 실패한 횟수 (받으면 0). */
+    val failureCount: Int = 0,
+    /** 실패 뒤 이때 (밀리초) 까지는 다시 요청하지 않는다. null 이면 기다릴 것 없음. */
+    val retryAfterMillis: Long? = null,
 ) {
     companion object {
         /**
@@ -33,7 +37,23 @@ internal data class FullScreenAdState(
          * 시계 오차를 생각해 5분 여유를 둔다.
          */
         const val MAX_AGE_MILLIS: Long = 55L * 60L * 1000L
+
+        /** 첫 실패 뒤 기다리는 시간. 실패할 때마다 두 배, [MAX_RETRY_DELAY_MILLIS] 까지. iOS 자매와 같은 값. */
+        const val FIRST_RETRY_DELAY_MILLIS: Long = 30_000L
+
+        /** 실패 뒤 가장 오래 기다리는 시간 (10분). */
+        const val MAX_RETRY_DELAY_MILLIS: Long = 10L * 60L * 1000L
+
+        /** n 번째 잇단 실패 뒤 기다리는 시간 — 30초 · 1분 · 2분 · 4분 · 8분 · 10분 … */
+        fun retryDelayMillis(failures: Int): Long {
+            if (failures <= 0) return 0L
+            val doubled = FIRST_RETRY_DELAY_MILLIS shl minOf(failures - 1, 10)
+            return minOf(doubled, MAX_RETRY_DELAY_MILLIS)
+        }
     }
+
+    /** 실패 뒤 기다리는 중인지. */
+    fun isBackingOff(nowMillis: Long): Boolean = retryAfterMillis?.let { nowMillis < it } ?: false
 
     /** 받은 광고가 있고, 아직 오래되지 않았는지. */
     fun isReady(nowMillis: Long): Boolean {
@@ -44,12 +64,28 @@ internal data class FullScreenAdState(
     /** 받은 광고가 있지만 오래돼 쓸 수 없는지. */
     fun isExpired(nowMillis: Long): Boolean = loadedAtMillis != null && !isReady(nowMillis)
 
-    /** 새 요청을 보내야 하는지 — 요청 중 · 표시 중 · 쓸 광고가 이미 있으면 보내지 않는다. */
-    fun shouldRequest(nowMillis: Long): Boolean = !isLoading && !isPresenting && !isReady(nowMillis)
+    /** 새 요청을 보내야 하는지 — 요청 중 · 표시 중 · 쓸 광고가 이미 있음 · 실패 뒤 기다리는 중이면 보내지 않는다. */
+    fun shouldRequest(nowMillis: Long): Boolean =
+        !isLoading && !isPresenting && !isReady(nowMillis) && !isBackingOff(nowMillis)
 
     fun requested(): FullScreenAdState = copy(isLoading = true, loadedAtMillis = null)
-    fun loaded(atMillis: Long): FullScreenAdState = copy(isLoading = false, loadedAtMillis = atMillis)
+    fun loaded(atMillis: Long): FullScreenAdState =
+        copy(isLoading = false, loadedAtMillis = atMillis, failureCount = 0, retryAfterMillis = null)
+
+    /** 실패 — 기다림 없이 (옛 동작, 시험용으로 남김). */
     fun failed(): FullScreenAdState = copy(isLoading = false, loadedAtMillis = null)
+
+    /**
+     * 실패 — 잇단 실패 횟수만큼 다시 요청을 늦춘다 (적재기가 쓴다).
+     * 채울 광고가 없을 때 곧바로 다시 요청하면 AdMob 에 "일치 안 됨" 요청만 쌓여 일치율이 떨어진다.
+     */
+    fun failed(atMillis: Long): FullScreenAdState {
+        val n = failureCount + 1
+        return copy(
+            isLoading = false, loadedAtMillis = null,
+            failureCount = n, retryAfterMillis = atMillis + retryDelayMillis(n)
+        )
+    }
 
     /** 띄우기 시작 — 같은 광고를 두 번 띄우지 않게 비운다. */
     fun presenting(): FullScreenAdState = copy(loadedAtMillis = null, isPresenting = true)
@@ -71,4 +107,25 @@ internal object FullScreenAdPolicy {
      * 다음 `showInterstitial` / `prepareInterstitial` 때 받는다.
      */
     const val RELOADS_AFTER_DISMISS: Boolean = false
+}
+
+/** "받아서 곧바로 띄우기" 한 번의 기다림 — 받음 · 실패 · 시간 넘김 중 먼저 온 하나만 끝으로 친다. iOS 자매와 같음. */
+internal class LoadAndShowWait {
+    enum class Outcome { SHOW, GIVE_UP }
+
+    var isFinished: Boolean = false
+        private set
+
+    /** 광고를 받음 → 띄운다 (이미 끝났으면 null). */
+    fun adLoaded(): Outcome? = finish(Outcome.SHOW)
+    /** 받기 실패 → 그만둔다. */
+    fun adFailed(): Outcome? = finish(Outcome.GIVE_UP)
+    /** 시간 넘김 → 그만둔다. 늦게 온 광고는 다음 차례에 쓰게 남는다. */
+    fun timedOut(): Outcome? = finish(Outcome.GIVE_UP)
+
+    private fun finish(o: Outcome): Outcome? {
+        if (isFinished) return null
+        isFinished = true
+        return o
+    }
 }

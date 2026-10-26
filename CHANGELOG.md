@@ -4,6 +4,41 @@
 
 자매 저장소: [`indie-kit-ios`](https://github.com/junu-labs/indie-kit-ios). iOS 와 단계 번호가 1:1 대칭이며, 같은 단계라도 데모 검증 시점이 다르면 태그 번호가 어긋날 수 있다.
 
+## [Unreleased]
+
+### 고침 (광고 — AdMob 일치율 이슈 다시, 터치카트 "두 번째 레시피" 보고에서 출발)
+
+- **채울 광고가 없을 때 곧바로 다시 요청하던 문제.** 전면 · 리워드 광고 받기가 실패하면 (채울 광고 없음 · 그물 끊김) 다음 `prepare…` / `show…` 에서 곧바로 다시 요청했다. 터치카트처럼 "광고가 준비될 때까지 3초마다 `prepareRewarded`" 를 부르면 실패한 요청이 줄줄이 쌓여 AdMob 일치율 (일치한 요청 / 요청) 이 떨어졌다. 이제 **실패 뒤에는 30초 · 1분 · 2분 … (최대 10분) 동안 같은 자리에 다시 요청하지 않는다** (기기 켜진 뒤 시간으로 잼). 받으면 처음으로 돌아간다.
+- **"다음 차례용" 으로 받아 둔 광고가 버려지던 것 — 새 길.** 드문 차례 (하루 한 번 무료 뒤 두 번째부터 광고 등) 는 미리 받아 두어도 그 차례가 안 오면 광고가 안 보이고 버려진다 (노출 / 요청이 낮아짐). 새 함수로 **누른 순간에 받아서 받는 대로 띄울** 수 있다 — 요청한 광고는 받으면 곧바로 보여지므로 버려지는 요청이 없다.
+
+### 추가 (광고)
+
+- `IndieKitAds.loadAndShowRewarded(activity, placement, timeoutMillis = 8000, onResult)` — 받아 둔 리워드 광고가 있으면 곧바로, 없으면 지금 받아서 띄운다. 시간 안에 못 받거나 실패하면 null. 늦게 온 광고는 다음 차례에 쓴다. 어느 실에서 불러도 된다.
+- `IndieKitAds.loadAndShowInterstitial(activity, placement, timeoutMillis = 5000, onDismiss)` — 같은 방식의 전면 광고. 못 받으면 건너뛰고 onDismiss. 다음 차례용으로 미리 받지 않는다. 받는 사이 화면이 닫히면 (Activity finishing) 띄우지 않는다.
+- 기존 `prepare…` / `show…` 는 그대로다 (위의 "실패 뒤 기다림" 만 더해짐). iOS 자매와 같은 이름.
+
+### 고침 (광고 — 배너 둘레 검은 띠 다시, 좁은 광고 소재일 때. 터치카트 3.3.2 시험 1번 · 회귀 시험 38)
+
+- **폭 맞춤 배너에 칸보다 좁은 소재가 오면 AdView 안쪽이 검게 칠해지던 문제.** 0.9.5 는 AdView *바깥* 둘레를 투명으로 했지만, 자리 폭 그대로 폭 맞춤 (`getInlineAdaptiveBannerAdSize`) 으로 요청하면 구글이 칸보다 좁은 소재 (시험 광고의 유튜브 소재 "AdMob has a YouTube channel") 를 보낼 때 AdView 안쪽 구글 WebView 가 남는 곳을 검게 칠했다 — 앱이 BannerAdView 폭을 320dp 로 묶어도 그 칸 안에서 생겼다 (캡처 37-long-list-top 의 양옆 띠). 칠하는 것이 WebView 안 HTML 이라 바탕색으로는 못 막는다. 이제 **배너는 기본으로 표준 320×50 고정 크기 (`AdSize.BANNER`) 로 요청한다** — 고정 크기 요청엔 그 크기에 꼭 맞는 소재만 와서 안쪽에 남는 곳이 없다. 둘레는 0.9.5 처럼 투명 (앱이 칠한 광고 자리 바탕색). 자리가 320dp 보다 좁으면 그 폭의 폭 맞춤으로 (예전과 같음). 고정 크기라 회전해도 AdView 를 다시 만들지 않는다.
+- 예전 폭 맞춤을 꼭 쓰려는 앱은 `BannerAdView(modifier, placement, adaptive = true)` (새 인자, 기본 false).
+
+### 해당 없음
+
+- iPhone 비정상 종료를 MetricKit 으로 받아 서버로 (IndieKitNetwork `CrashReports`) — 애플 전용. Android 비정상 종료는 공장이 Play Console 에서 하루 한 번 읽는다 (lib/android_crash_reports.py).
+- 앱 안 회사 이름 JunuLabs → JUNU — indie-kit 에는 화면에 보이는 회사 이름 문구가 없다 (설정 화면 저작권 줄은 각 앱 코드 안). 앱마다 고쳐야 한다.
+
+### 앱에서 바꿀 것
+
+- 꼭 바꿀 것은 없다 — 고치지 않아도 빌드되고 돈다. 배너는 판만 올리면 320×50 고정으로 바뀐다 (광고 자리 높이 50dp 그대로 맞음). 터치카트 `AdSlot.kt` 의 폭 320dp 묶음은 이제 없어도 되지만 둬도 같다.
+- **일치율 · 노출률을 올리려면 (권장)**: 드문 차례의 광고는 미리 받지 말고 누른 순간 받아서 띄운다.
+  - 리워드: 화면이 열릴 때 부르던 `prepareRewarded(…)` 와 "준비될 때까지 3초마다 다시 부르기" 고리 (`LaunchedEffect` 의 while) 를 빼고, 단추를 누르면 단추를 "불러오는 중" 으로 두고 `IndieKitAds.loadAndShowRewarded(act, placement = …) { reward -> … }`. 단추는 광고가 받아졌는지와 상관없이 (오늘 광고 횟수가 남았으면) 보인다. 터치카트 `ui/recipe/RecipeScreen.kt` 가 해당.
+  - 전면: 드물게 오는 차례면 `prepareInterstitial` 대신 그 자리에서 `loadAndShowInterstitial(activity) { … }` (받는 동안 "잠시만요").
+- 설정 화면 저작권 줄 회사 이름 (JunuLabs → JUNU) 은 앱마다 고친다.
+
+### 검증
+
+- 단위 시험 `full screen ad state backs off after failure` · `full screen ad state backoff grows and resets on load` · `load and show wait finishes once` · `banner requests standard size by default` · `banner request adaptive when narrow or chosen` · `banner standard request stable across rotation` 더함 / `./gradlew testDebugUnitTest assembleRelease` 통과 (광고 31).
+
 ## [0.9.5] - 2026-10-17
 
 ### 고침 (광고 — AdMob 보고서에서 노출 / 요청 50% 미만, 일치율 60%대로 나온 건에서 출발)
