@@ -4,7 +4,7 @@
 
 자매 저장소: [`indie-kit-ios`](https://github.com/junu-labs/indie-kit-ios). iOS 와 단계 번호가 1:1 대칭이며, 같은 단계라도 데모 검증 시점이 다르면 태그 번호가 어긋날 수 있다.
 
-## [Unreleased]
+## [0.9.6] - 2026-10-27
 
 ### 고침 (광고 — AdMob 일치율 이슈 다시, 터치카트 "두 번째 레시피" 보고에서 출발)
 
